@@ -113,14 +113,15 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		this.getLevel().sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 11);
 	}
 
-	private Vector3f getStandardForceTo(Vec3 pos, Vector3f direction) {
-		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue();
+	private Vector3f getStandardForceTo(Vec3 pos, Vector3f direction, Vector3f dest) {
+		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue() / 2;
 		Vec3 selfPos = this.getLinkedEntity().position();
-		double distance = selfPos.distanceToSqr(pos);
 		Vector3f facing = this.getFacing();
-		float angle = facing.angle(direction.mul(-1));
-		float force = (float)(maxForce / distance * Math.cos(angle / 180 * Math.PI));
-		return pos.toVector3f().sub((float)(selfPos.x), (float)(selfPos.y), (float)(selfPos.z)).normalize(force, new Vector3f());
+		dest.set(pos.x, pos.y, pos.z).sub((float)(selfPos.x) + direction.x / 2, (float)(selfPos.y) + direction.y / 2, (float)(selfPos.z) + direction.z / 2);
+		float force1 = (float)(maxForce / dest.lengthSquared() * Math.cos(facing.angle(dest) / 180 * Math.PI));
+		dest.add(direction);
+		float force2 = (float)(maxForce / dest.lengthSquared() * Math.cos(facing.angle(dest) / 180 * Math.PI));
+		return dest.normalize(force1 + force2);
 	}
 
 	/**
@@ -141,7 +142,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		final float maxDistanceSqr = maxDistance * maxDistance;
 		Vector3f facing = this.getFacing();
 		Matrix4dc transform = currentShip.getShipToWorld();
-		Vector3d center = transform.transformPosition(new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5).add(this.facing.toVector3f().mul(0.49f)));
+		Vector3d center = transform.transformPosition(new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5));
 
 		Vec3 axisX = new Vec3(transform.transformDirection(new Vector3f(maxDistance, 0, 0)));
 		Vec3 axisY = new Vec3(transform.transformDirection(new Vector3f(0, maxDistance, 0)));
@@ -205,10 +206,10 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		List<MagnetEntity> magnets = this.scanMagnets();
 		this.thrusterData.setForce((totalForce) -> {
 			totalForce.set(0f);
+			Vector3f forceDest = new Vector3f();
 			for (MagnetEntity magnet : magnets) {
-				Vector3f force = this.getStandardForceTo(magnet.position(), magnet.getFacing()).mul(this.power * magnet.getAttachedBlock().power);
-				LOGGER.info("force " + force + " power:" + -this.power * magnet.getAttachedBlock().power);
-				totalForce.add(force);
+				totalForce.add(
+					this.getStandardForceTo(magnet.position(), magnet.getFacing(), forceDest).mul(this.power * magnet.getAttachedBlock().power));
 			}
 			LOGGER.info("total force " + totalForce);
 		});
