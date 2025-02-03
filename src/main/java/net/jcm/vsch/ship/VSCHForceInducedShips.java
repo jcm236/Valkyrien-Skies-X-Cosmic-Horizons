@@ -51,51 +51,37 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		PhysShipImpl physShip = (PhysShipImpl) physicShip;
 		// Apply thrusters force
 		thrusters.forEach((pos, data) -> {
-			// Get current thrust from thruster
-			float throttle = data.throttle;
-			if (throttle == 0.0f) {
+			if (data.force.lengthSquared() == 0.0f) {
 				return;
 			}
 
 			// Transform force direction from ship relative to world relative
-			Vector3d tForce = physShip.getTransform().getShipToWorld().transformDirection(data.dir, new Vector3d());
-			tForce.mul(throttle);
-
+			Vector3d tForce = physicShip.getTransform().getShipToWorld().transformDirection(data.force, new Vector3d());
 
 			Vector3dc linearVelocity = physShip.getPoseVel().getVel();
 
 			if (VSCHConfig.LIMIT_SPEED.get()) {
-
 				int maxSpeed = VSCHConfig.MAX_SPEED.get().intValue();
-
-				if (Math.abs(linearVelocity.length()) >= maxSpeed) {
-
+				if (linearVelocity.lengthSquared() >= maxSpeed * maxSpeed) {
 					double dotProduct = tForce.dot(linearVelocity);
-
 					if (dotProduct > 0) {
+						switch (data.mode) {
+							case GLOBAL -> applyScaledForce(physShip, linearVelocity, tForce, maxSpeed);
+							case POSITION -> {
+								// POSITION should be the only other value
+								Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
+									.add(0.5, 0.5, 0.5)
+									.sub(physicShip.getTransform().getPositionInShip());
 
-						if (data.mode == ThrusterData.ThrusterMode.GLOBAL) {
+								Vector3d parallel = new Vector3d(tPos).mul(tForce.dot(tPos) / tForce.dot(tForce));
+								Vector3d perpendicular = new Vector3d(tForce).sub(parallel);
 
-							applyScaledForce(physShip, linearVelocity, tForce, maxSpeed);
+								// rotate the ship
+								physicShip.applyInvariantForceToPos(perpendicular, tPos);
 
-						} else {
-							// POSITION should be the only other value
-
-							Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
-									.add(0.5, 0.5, 0.5, new Vector3d())
-									.sub(physShip.getTransform().getPositionInShip());
-
-
-							Vector3d parallel = new Vector3d(tPos).mul(tForce.dot(tPos) / tForce.dot(tForce));
-
-							Vector3d perpendicular = new Vector3d(tForce).sub(parallel);
-
-							// rotate the ship
-							physShip.applyInvariantForceToPos(perpendicular, tPos);
-
-							// apply global force, since the force is perfectly lined up with the centre of gravity
-							applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
-
+								// apply global force, since the force is perfectly lined up with the centre of gravity
+								applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
+							}
 						}
 						return;
 					}
@@ -103,23 +89,18 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 			}
 
 			// Switch between applying force at position and just applying the force
-			if (data.mode == ThrusterData.ThrusterMode.POSITION) {
-				Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
-						.add(0.5, 0.5, 0.5, new Vector3d())
-						.sub(physShip.getTransform().getPositionInShip());
-
-				physShip.applyInvariantForceToPos(tForce, tPos);
-
-				//ThrusterData.ThrusterMode.GLOBAL should be the only other value:
-			} else {
-				// Apply the force at no specific position
-				physShip.applyInvariantForce(tForce);
+			switch (data.mode) {
+				case GLOBAL -> physicShip.applyInvariantForce(tForce);
+				case POSITION -> {
+					Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
+						.add(0.5, 0.5, 0.5)
+						.sub(physicShip.getTransform().getPositionInShip());
+					physicShip.applyInvariantForceToPos(tForce, tPos);
+				}
 			}
 		});
 
 		// Prep for draggers
-
-
 		// Apply draggers force
 		draggers.forEach((pos, data) -> {
 			Vector3dc linearVelocity = physShip.getPoseVel().getVel();
@@ -159,9 +140,9 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		double deltaTime = 1.0 / (VSGameUtilsKt.getVsPipeline(ValkyrienSkiesMod.getCurrentServer()).computePhysTps());
 		double mass = physShip.getInertia().getShipMass();
 
-		//Invert the parallel projection of tForce onto linearVelocity and scales it so that the resulting speed is exactly
+		// Invert the parallel projection of tForce onto linearVelocity and scales it so that the resulting speed is exactly
 		// equal to length of linearVelocity, but still in the direction the ship would have been going without the speed limit
-		Vector3d targetVelocity = (new Vector3d(linearVelocity).add(new Vector3d(tForce).mul(deltaTime / mass)).normalize(maxSpeed)).sub(linearVelocity);
+		Vector3d targetVelocity = new Vector3d(linearVelocity).add(new Vector3d(tForce).mul(deltaTime / mass)).normalize(maxSpeed).sub(linearVelocity);
 
 		// Apply the force at no specific position
 		physShip.applyInvariantForce(targetVelocity.mul(mass / deltaTime));
@@ -172,7 +153,6 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 	public void addThruster(BlockPos pos, ThrusterData data) {
 		thrusters.put(pos, data);
 	}
-
 
 	public void removeThruster(BlockPos pos) {
 		thrusters.remove(pos);
@@ -215,11 +195,7 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 
 	public static VSCHForceInducedShips get(Level level, BlockPos pos) {
 		ServerLevel serverLevel = (ServerLevel) level;
-		// Don't ask, I don't know
 		ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, pos);
-		if (ship == null) {
-			ship = VSGameUtilsKt.getShipManagingPos(serverLevel, pos);
-		}
 		// Seems counter-intutive at first. But basically, it returns null if it wasn't a ship. Otherwise, it gets the attachment OR creates and then gets it
 		return ship != null ? getOrCreate(ship) : null;
 	}

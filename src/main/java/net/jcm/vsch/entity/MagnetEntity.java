@@ -1,59 +1,81 @@
 package net.jcm.vsch.entity;
 
 import net.jcm.vsch.blocks.VSCHBlocks;
+import net.jcm.vsch.blocks.entity.MagnetBlockEntity;
+
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.phys.Vec3;
+
 import org.joml.Vector3d;
+import org.joml.Vector3f;
+import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
-public class MagnetEntity extends Entity {
-	private BlockPos pos;
+public class MagnetEntity extends Entity implements IAttachableEntity {
+	public static final EntityTypeTest TESTER = EntityTypeTest.forClass(MagnetEntity.class);
 
-	public MagnetEntity(EntityType<? extends MagnetEntity> entityType, Level level, BlockPos pos) {
+	private BlockPos pos;
+	private int keepAlive = 0;
+
+	public MagnetEntity(EntityType<? extends MagnetEntity> entityType, Level level) {
 		super(entityType, level);
 		this.noPhysics = true; // Prevents collision with blocks
 		this.setInvisible(true);
+	}
+
+	public BlockPos getAttachedBlockPos() {
+		return this.pos;
+	}
+
+	public void setAttachedBlockPos(BlockPos pos) {
 		this.pos = pos;
+		this.keepAlive = 3;
 	}
 
-	public MagnetEntity(EntityType<MagnetEntity> magnetEntityEntityType, Level level) {
-		super(magnetEntityEntityType, level);
-		this.noPhysics = true; // Prevents collision with blocks
-		this.setInvisible(true);
+	public MagnetBlockEntity getAttachedBlock() {
+		if (this.pos == null) {
+			return null;
+		}
+		return (MagnetBlockEntity)(this.level().getBlockEntity(this.pos));
 	}
 
-	public void setAttachedPos(BlockPos pos) {
-		this.pos = pos;
-	}
-
-	@Override
-	public boolean shouldRender(double pX, double pY, double pZ) {
-		return false;
+	public Vector3f getFacing() {
+		return this.getAttachedBlock().getFacing();
 	}
 
 	@Override
 	public void tick() {
-		Level lv = level();
-		if (!(lv instanceof ServerLevel)) {
+		Level level = this.level();
+		if (!(level instanceof ServerLevel serverLevel)) {
 			return;
 		}
-		if (pos == null) {
+		this.keepAlive--;
+		if (this.pos == null || this.keepAlive <= 0) {
 			this.discard();
 			return;
 		}
 
-		BlockState block = lv.getBlockState(pos);
-
-		/*if (!block.is(VSCHBlocks.MAGNET_BLOCK.get())) {
-			this.discard();
-		}*/
+		Vec3 pos = Vec3.atCenterOf(this.pos);
+		ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, this.pos);
+		if (ship != null) {
+			Vector3d vec3d = ship.getShipToWorld().transformPosition(new Vector3d(pos.x, pos.y, pos.z));
+			pos = new Vec3(vec3d.x, vec3d.y, vec3d.z);
+		}
+		this.setPos(pos);
 	}
 
 	@Override
@@ -72,5 +94,26 @@ public class MagnetEntity extends Entity {
 		compoundTag.putInt("attachPosX", pos.getX());
 		compoundTag.putInt("attachPosY", pos.getY());
 		compoundTag.putInt("attachPosZ", pos.getZ());
+	}
+	
+	@Override
+	public boolean shouldRender(double pX, double pY, double pZ) {
+		return false;
+	}
+
+	public static class Renderer extends EntityRenderer<MagnetEntity> {
+		public Renderer(EntityRendererProvider.Context ctx) {
+			super(ctx);
+		}
+
+		@Override
+		public boolean shouldRender(MagnetEntity a0, Frustum a1, double a2, double a3, double a4) {
+			return false;
+		}
+
+		@Override
+		public ResourceLocation getTextureLocation(MagnetEntity a0) {
+			return null;
+		}
 	}
 }
