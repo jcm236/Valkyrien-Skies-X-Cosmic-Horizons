@@ -13,6 +13,7 @@ import net.jcm.vsch.ship.VSCHForceInducedShips;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -21,7 +22,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.capabilities.Capability;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.common.util.LazyOptional;
+import net.minecraftforge.energy.IEnergyStorage;
 
 import org.joml.Matrix4dc;
 import org.joml.Vector3d;
@@ -38,9 +41,12 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	private final MagnetData magnetData;
 	private boolean needInit = true;
 	private volatile float power = -1.0f; // Range: [-1.0, 1.0]
+	private volatile float tickPower = 0f;
 	private volatile boolean isPeripheralMode = false;
 	private boolean wasPeripheralMode = true;
+	private volatile boolean isGenerator = false;
 	private LazyOptional<Object> lazyPeripheral = LazyOptional.empty();
+	private final MagnetEnergyStorage energyStorage = new MagnetEnergyStorage(VSCHConfig.MAGNET_BLOCK_CONSUME_ENERGY.get().intValue());
 
 	public MagnetBlockEntity(BlockPos pos, BlockState state) {
 		super(VSCHBlockEntities.MAGNET_BLOCK_ENTITY.get(), pos, state);
@@ -69,10 +75,21 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	}
 
 	/**
-	 * @return magnet power between -1.0~1.0
+	 * @return magnet target working power between -1.0~1.0
 	 */
 	public float getPower() {
 		return this.power;
+	}
+
+	/**
+	 * @return the max power the magnet can activate based on the energy input
+	 */
+	public float getMaxAvaliablePower() {
+		return (float)(this.energyStorage.stored) / this.energyStorage.maxEnergyRate;
+	}
+
+	public float getActivatablePower() {
+		return this.tickPower;
 	}
 
 	public void setPower(float power) {
@@ -110,6 +127,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue();
 		pos.sub(selfPos, dest);
 		float force = (float)(maxForce / dest.lengthSquared() * Math.cos(angle));
+		// TODO: increase force when multiple magnets are stacking together
 		return dest.normalize(force);
 	}
 
@@ -150,7 +168,11 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			if (center.distanceSquared(position.x, position.y, position.z) > maxDistanceSqr) {
 				return false;
 			}
-			if (magnet.getAttachedBlock() == null) {
+			MagnetBlockEntity block = magnet.getAttachedBlock();
+			if (block == null) {
+				return false;
+			}
+			if (block.getActivatablePower() == 0) {
 				return false;
 			}
 			ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, magnet.getAttachedBlockPos());
@@ -163,13 +185,27 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 
 	@Override
 	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction direction) {
-		if (CompatMods.COMPUTERCRAFT.isLoaded() && cap == Capabilities.CAPABILITY_PERIPHERAL) {
+		if (cap == ForgeCapabilities.ENERGY) {
+			return LazyOptional.of(() -> this.energyStorage).cast();
+		} else if (CompatMods.COMPUTERCRAFT.isLoaded() && cap == Capabilities.CAPABILITY_PERIPHERAL) {
 			if (!lazyPeripheral.isPresent()) {
 				lazyPeripheral = LazyOptional.of(() -> new MagnetPeripheral(this));
 			}
 			return lazyPeripheral.cast();
 		}
 		return super.getCapability(cap, direction);
+	}
+
+	@Override
+	public void saveAdditional(CompoundTag tag) {
+		super.saveAdditional(tag);
+		tag.putInt("StoredEnergy", this.energyStorage.stored);
+	}
+
+	@Override
+	public void load(CompoundTag tag) {
+		this.energyStorage.stored = tag.getInt("StoredEnergy");
+		super.load(tag);
 	}
 
 	public void neighborChanged(Block block, BlockPos pos, boolean moving) {
@@ -187,10 +223,24 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		}
 		this.wasPeripheralMode = this.isPeripheralMode;
 
-		boolean facingChanged = false; // TODO: find a proper way to check if the facing is changed
+		// TODO: find a proper way to check if the facing is changed
+		boolean facingChanged = false;
 		if (facingChanged) {
 			this.facing = Vec3.atLowerCornerOf(state.getValue(DirectionalBlock.FACING).getNormal());
 			this.magnetData.facing = this.facing.toVector3f();
+		}
+
+		if (!this.isGenerator) {
+			float needEnergy = tickPower * this.energyStorage.maxEnergyRate;
+			if (needEnergy < 0) {
+				if (needEnergy < -this.energyStorage.stored) {
+					needEnergy = -this.energyStorage.stored;
+				}
+			} else if (needEnergy < this.energyStorage.stored) {
+				needEnergy = this.energyStorage.stored;
+			}
+			this.energyStorage.stored -= (int)(Math.abs(needEnergy));
+			this.tickPower = needEnergy / this.energyStorage.maxEnergyRate;
 		}
 
 		if (!VSGameUtilsKt.isBlockInShipyard(this.getLevel(), this.getBlockPos())) {
@@ -205,6 +255,10 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			}
 		}
 
+		float selfPower = this.getActivatablePower();
+		if (selfPower == 0) {
+			return;
+		}
 		Vec3 selfPos = this.getLinkedEntity().position();
 		Vector3f selfFacing = this.getFacing().mul(0.4f);
 		Vector3f selfPosFront = new Vector3f((float)(selfPos.x) + selfFacing.x, (float)(selfPos.y) + selfFacing.y, (float)(selfPos.z) + selfFacing.z);
@@ -216,7 +270,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			Vector3f forceDest3 = new Vector3f();
 			Vector3f forceDest4 = new Vector3f();
 			for (MagnetEntity magnet : magnets) {
-				float power = this.power * magnet.getAttachedBlock().power;
+				float power = selfPower * magnet.getAttachedBlock().getActivatablePower();
 				Vec3 pos = magnet.position();
 				Vector3f facing = magnet.getFacing().mul(0.4f);
 				float angle = selfFacing.angle(facing);
@@ -263,5 +317,57 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	private static float getPowerByRedstone(Level level, BlockPos pos) {
 		int signal = level.getBestNeighborSignal(pos);
 		return signal == 0 ? -1 : (float)(signal - 1) / 14 * 2 - 1;
+	}
+
+	private class MagnetEnergyStorage implements IEnergyStorage {
+		final int maxEnergyRate;
+		int stored = 0;
+
+		MagnetEnergyStorage(int maxEnergyRate) {
+			this.maxEnergyRate = maxEnergyRate;
+		}
+
+		@Override
+		public boolean canReceive() {
+			return !MagnetBlockEntity.this.isGenerator;
+		}
+
+		@Override
+		public int receiveEnergy(int avaliable, boolean simulate) {
+			int received = this.maxEnergyRate - this.stored;
+			if (received > avaliable) {
+				received = avaliable;
+			}
+			if (!simulate) {
+				this.stored += received;
+			}
+			return received;
+		}
+
+		@Override
+		public int getEnergyStored() {
+			return this.stored;
+		}
+
+		@Override
+		public int getMaxEnergyStored() {
+			return this.maxEnergyRate;
+		}
+
+		@Override
+		public boolean canExtract() {
+			return MagnetBlockEntity.this.isGenerator;
+		}
+
+		@Override
+		public int extractEnergy(int require, boolean simulate) {
+			if (require > this.stored) {
+				require = this.stored;
+			}
+			if (!simulate) {
+				this.stored -= require;
+			}
+			return require;
+		}
 	}
 }
