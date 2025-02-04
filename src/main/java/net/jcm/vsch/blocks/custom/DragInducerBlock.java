@@ -55,16 +55,15 @@ public class DragInducerBlock extends Block implements EntityBlock {
 	@SuppressWarnings("deprecation")
 	@Override
 	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-		if (!(level instanceof ServerLevel)) return;
+		super.onRemove(state, level, pos, newState, isMoving);
+		if (!(level instanceof ServerLevel)) {
+			return;
+		}
 
-		// ----- Remove the thruster from the force appliers for the current level ----- //
-		// I guess VS does this automatically when switching a shipyards dimension?
 		VSCHForceInducedShips ships = VSCHForceInducedShips.get(level, pos);
 		if (ships != null) {
 			ships.removeDragger(pos);
 		}
-
-		super.onRemove(state, level, pos, newState, isMoving);
 	}
 
 	@Override

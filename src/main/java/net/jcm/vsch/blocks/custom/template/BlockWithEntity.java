@@ -19,14 +19,14 @@ public abstract class BlockWithEntity<T extends BlockEntityWithEntity<?>> extend
 	}
 
 	@Override
-	public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean isMoving) {
-		if (!world.isClientSide && state.getBlock() != newState.getBlock()) {
-			BlockEntity blockEntity = world.getBlockEntity(pos);
+	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
+		super.onRemove(state, level, pos, newState, isMoving);
+		if (!level.isClientSide && state.getBlock() != newState.getBlock()) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
 			if (blockEntity instanceof BlockEntityWithEntity<?> blockEntityWithEntity) {
 				blockEntityWithEntity.removeLinkedEntity();
 			}
 		}
-		super.onRemove(state, world, pos, newState, isMoving);
 	}
 
 	@Override

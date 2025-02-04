@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
@@ -69,13 +70,15 @@ public class MagnetEntity extends Entity implements IAttachableEntity {
 			return;
 		}
 
-		Vec3 pos = Vec3.atCenterOf(this.pos);
+		double x = this.pos.getX() + 0.5, y = this.pos.getY() + 0.5, z = this.pos.getZ() + 0.5;
 		ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, this.pos);
 		if (ship != null) {
-			Vector3d vec3d = ship.getShipToWorld().transformPosition(new Vector3d(pos.x, pos.y, pos.z));
-			pos = new Vec3(vec3d.x, vec3d.y, vec3d.z);
+			Vector3d vec3d = ship.getShipToWorld().transformPosition(new Vector3d(x, y, z));
+			x = vec3d.x;
+			y = vec3d.y;
+			z = vec3d.z;
 		}
-		this.setPos(pos);
+		this.setPosRaw(x, y, z);
 	}
 
 	@Override
@@ -96,6 +99,11 @@ public class MagnetEntity extends Entity implements IAttachableEntity {
 		compoundTag.putInt("attachPosZ", pos.getZ());
 	}
 	
+	@Override	
+	public boolean broadcastToPlayer(ServerPlayer player) {
+		return false;
+	}
+
 	@Override
 	public boolean shouldRender(double pX, double pY, double pZ) {
 		return false;

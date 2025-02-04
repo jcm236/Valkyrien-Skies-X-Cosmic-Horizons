@@ -1,7 +1,5 @@
 package net.jcm.vsch.blocks.entity;
 
-import com.mojang.logging.LogUtils;
-
 import dan200.computercraft.shared.Capabilities;
 
 import net.jcm.vsch.blocks.custom.template.BlockEntityWithEntity;
@@ -28,7 +26,6 @@ import net.minecraftforge.common.util.LazyOptional;
 import org.joml.Matrix4dc;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
-import org.slf4j.Logger;
 import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
@@ -37,10 +34,9 @@ import java.util.Collections;
 import java.util.List;
 
 public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
-	private static final Logger LOGGER = LogUtils.getLogger();
-
 	private Vec3 facing; // TODO: update facing as block updated
 	private final MagnetData magnetData;
+	private boolean needInit = true;
 	private volatile float power = -1.0f; // Range: [-1.0, 1.0]
 	private volatile boolean isPeripheralMode = false;
 	private boolean wasPeripheralMode = true;
@@ -113,7 +109,6 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	private static Vector3f getStandardForceTo(Vector3f selfPos, float angle, Vector3f pos, Vector3f dest) {
 		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue();
 		pos.sub(selfPos, dest);
-		LOGGER.info("dest.lengthSquared(): " + dest.lengthSquared());
 		float force = (float)(maxForce / dest.lengthSquared() * Math.cos(angle));
 		return dest.normalize(force);
 	}
@@ -150,11 +145,8 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		double maxZ = Math.max(Math.max(Math.max(Math.max(Math.max(axisX.z, axisY.z), axisZ.z), -axisX.z), -axisY.z), -axisZ.z);
 		AABB box = new AABB(minX, minY, minZ, maxX, maxY, maxZ).move(center.x, center.y, center.z);
 
-		LOGGER.info("magnet box: " + this + ": " + box);
-		LOGGER.info("this: " + this.getLinkedEntity());
 		return serverLevel.<MagnetEntity>getEntities(MagnetEntity.TESTER, box, (magnet) -> {
 			Vec3 position = magnet.position();
-			LOGGER.info("magnet force: " + this + " -> " + magnet);
 			if (center.distanceSquared(position.x, position.y, position.z) > maxDistanceSqr) {
 				return false;
 			}
@@ -195,7 +187,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		}
 		this.wasPeripheralMode = this.isPeripheralMode;
 
-		boolean facingChanged = true; // TODO: find a proper way to check if the facing is changed
+		boolean facingChanged = false; // TODO: find a proper way to check if the facing is changed
 		if (facingChanged) {
 			this.facing = Vec3.atLowerCornerOf(state.getValue(DirectionalBlock.FACING).getNormal());
 			this.magnetData.facing = this.facing.toVector3f();
@@ -205,13 +197,20 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			return;
 		}
 
+		if (this.needInit) {
+			VSCHForceInducedShips ships = VSCHForceInducedShips.get(level, blockPos);
+			if (ships != null && ships.getThrusterAtPos(blockPos) == null) {
+				ships.addMagnet(blockPos, this.magnetData);
+				this.needInit = false;
+			}
+		}
+
+		Vec3 selfPos = this.getLinkedEntity().position();
+		Vector3f selfFacing = this.getFacing().mul(0.4f);
+		Vector3f selfPosFront = new Vector3f((float)(selfPos.x) + selfFacing.x, (float)(selfPos.y) + selfFacing.y, (float)(selfPos.z) + selfFacing.z);
+		Vector3f selfPosBack = new Vector3f((float)(selfPos.x) - selfFacing.x, (float)(selfPos.y) - selfFacing.y, (float)(selfPos.z) - selfFacing.z);
 		List<MagnetEntity> magnets = this.scanMagnets();
 		this.magnetData.setForces((frontForce, backForce) -> {
-			Vec3 selfPos = this.getLinkedEntity().position();
-			Vector3f selfFacing = this.getFacing().mul(0.4f);
-			Vector3f selfPosFront = new Vector3f((float)(selfPos.x) + selfFacing.x, (float)(selfPos.y) + selfFacing.y, (float)(selfPos.z) + selfFacing.z);
-			Vector3f selfPosBack = new Vector3f((float)(selfPos.x) - selfFacing.x, (float)(selfPos.y) - selfFacing.y, (float)(selfPos.z) - selfFacing.z);
-			Vector3f forceDest = new Vector3f();
 			Vector3f forceDest1 = new Vector3f();
 			Vector3f forceDest2 = new Vector3f();
 			Vector3f forceDest3 = new Vector3f();
@@ -253,13 +252,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 					backForce.add(maxForceVec);
 				}
 			}
-			LOGGER.info("total force " + frontForce + "; " + backForce);
 		});
-
-		VSCHForceInducedShips ships = VSCHForceInducedShips.get(level, blockPos);
-		if (ships != null && ships.getThrusterAtPos(blockPos) == null) {
-			ships.addMagnet(blockPos, this.magnetData);
-		}
 	}
 
 	private void updatePowerByRedstone() {
@@ -268,6 +261,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	}
 
 	private static float getPowerByRedstone(Level level, BlockPos pos) {
-		return (float)(level.getBestNeighborSignal(pos)) / 15 * 2 - 1;
+		int signal = level.getBestNeighborSignal(pos);
+		return signal == 0 ? -1 : (float)(signal - 1) / 14 * 2 - 1;
 	}
 }

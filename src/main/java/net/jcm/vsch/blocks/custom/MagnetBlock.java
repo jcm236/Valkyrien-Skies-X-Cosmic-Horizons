@@ -1,6 +1,5 @@
 package net.jcm.vsch.blocks.custom;
 
-
 import net.jcm.vsch.blocks.custom.template.BlockWithEntity;
 import net.jcm.vsch.blocks.entity.MagnetBlockEntity;
 import net.jcm.vsch.blocks.entity.template.ParticleBlockEntity;
@@ -60,11 +59,9 @@ public class MagnetBlock extends BlockWithEntity<MagnetBlockEntity> {
 			return;
 		}
 
-		// ----- Remove the thruster from the force appliers for the current level ----- //
-		// I guess VS does this automatically when switching a shipyards dimension?
 		VSCHForceInducedShips ships = VSCHForceInducedShips.get(level, pos);
 		if (ships != null) {
-			//ships.removeDragger(pos);
+			ships.removeMagnet(pos);
 		}
 	}
 
