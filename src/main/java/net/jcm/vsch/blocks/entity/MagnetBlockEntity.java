@@ -10,7 +10,7 @@ import net.jcm.vsch.compat.cc.MagnetPeripheral;
 import net.jcm.vsch.config.VSCHConfig;
 import net.jcm.vsch.entity.MagnetEntity;
 import net.jcm.vsch.entity.VSCHEntities;
-import net.jcm.vsch.ship.ThrusterData;
+import net.jcm.vsch.ship.MagnetData;
 import net.jcm.vsch.ship.VSCHForceInducedShips;
 
 import net.minecraft.core.BlockPos;
@@ -40,7 +40,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	private static final Logger LOGGER = LogUtils.getLogger();
 
 	private Vec3 facing; // TODO: update facing as block updated
-	private final ThrusterData thrusterData;
+	private final MagnetData magnetData;
 	private volatile float power = -1.0f; // Range: [-1.0, 1.0]
 	private volatile boolean isPeripheralMode = false;
 	private boolean wasPeripheralMode = true;
@@ -49,14 +49,11 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	public MagnetBlockEntity(BlockPos pos, BlockState state) {
 		super(VSCHBlockEntities.MAGNET_BLOCK_ENTITY.get(), pos, state);
 		this.facing = Vec3.atLowerCornerOf(state.getValue(DirectionalBlock.FACING).getNormal());
-		this.thrusterData = new ThrusterData(
-			new Vector3d(),
-			ThrusterData.ThrusterMode.POSITION
-		);
+		this.magnetData = new MagnetData(this.facing.toVector3f());
 	}
 
 	public float getAttractDistance() {
-		return VSCHConfig.MAGNET_BLOCK_DISTANCE.get().floatValue();
+		return VSCHConfig.MAGNET_BLOCK_DISTANCE.get().floatValue() + 1;
 	}
 
 	@Override
@@ -113,15 +110,12 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		this.getLevel().sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 11);
 	}
 
-	private Vector3f getStandardForceTo(Vec3 pos, Vector3f direction, Vector3f dest) {
-		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue() / 2;
-		Vec3 selfPos = this.getLinkedEntity().position();
-		Vector3f facing = this.getFacing();
-		dest.set(pos.x, pos.y, pos.z).sub((float)(selfPos.x) + direction.x / 2, (float)(selfPos.y) + direction.y / 2, (float)(selfPos.z) + direction.z / 2);
-		float force1 = (float)(maxForce / dest.lengthSquared() * Math.cos(facing.angle(dest) / 180 * Math.PI));
-		dest.add(direction);
-		float force2 = (float)(maxForce / dest.lengthSquared() * Math.cos(facing.angle(dest) / 180 * Math.PI));
-		return dest.normalize(force1 + force2);
+	private static Vector3f getStandardForceTo(Vector3f selfPos, float angle, Vector3f pos, Vector3f dest) {
+		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue();
+		pos.sub(selfPos, dest);
+		LOGGER.info("dest.lengthSquared(): " + dest.lengthSquared());
+		float force = (float)(maxForce / dest.lengthSquared() * Math.cos(angle));
+		return dest.normalize(force);
 	}
 
 	/**
@@ -164,6 +158,9 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			if (center.distanceSquared(position.x, position.y, position.z) > maxDistanceSqr) {
 				return false;
 			}
+			if (magnet.getAttachedBlock() == null) {
+				return false;
+			}
 			ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, magnet.getAttachedBlockPos());
 			if (ship == currentShip) {
 				return false;
@@ -190,8 +187,8 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	}
 
 	@Override
-	public void tickForce(ServerLevel level, BlockPos pos, BlockState state) {
-		super.tickForce(level, pos, state);
+	public void tickForce(ServerLevel level, BlockPos blockPos, BlockState state) {
+		super.tickForce(level, blockPos, state);
 
 		if (this.wasPeripheralMode != this.isPeripheralMode && !this.isPeripheralMode) {
 			this.updatePowerByRedstone();
@@ -201,22 +198,67 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		boolean facingChanged = true; // TODO: find a proper way to check if the facing is changed
 		if (facingChanged) {
 			this.facing = Vec3.atLowerCornerOf(state.getValue(DirectionalBlock.FACING).getNormal());
+			this.magnetData.facing = this.facing.toVector3f();
+		}
+
+		if (!VSGameUtilsKt.isBlockInShipyard(this.getLevel(), this.getBlockPos())) {
+			return;
 		}
 
 		List<MagnetEntity> magnets = this.scanMagnets();
-		this.thrusterData.setForce((totalForce) -> {
-			totalForce.set(0f);
+		this.magnetData.setForces((frontForce, backForce) -> {
+			Vec3 selfPos = this.getLinkedEntity().position();
+			Vector3f selfFacing = this.getFacing().mul(0.4f);
+			Vector3f selfPosFront = new Vector3f((float)(selfPos.x) + selfFacing.x, (float)(selfPos.y) + selfFacing.y, (float)(selfPos.z) + selfFacing.z);
+			Vector3f selfPosBack = new Vector3f((float)(selfPos.x) - selfFacing.x, (float)(selfPos.y) - selfFacing.y, (float)(selfPos.z) - selfFacing.z);
 			Vector3f forceDest = new Vector3f();
+			Vector3f forceDest1 = new Vector3f();
+			Vector3f forceDest2 = new Vector3f();
+			Vector3f forceDest3 = new Vector3f();
+			Vector3f forceDest4 = new Vector3f();
 			for (MagnetEntity magnet : magnets) {
-				totalForce.add(
-					this.getStandardForceTo(magnet.position(), magnet.getFacing(), forceDest).mul(this.power * magnet.getAttachedBlock().power));
+				float power = this.power * magnet.getAttachedBlock().power;
+				Vec3 pos = magnet.position();
+				Vector3f facing = magnet.getFacing().mul(0.4f);
+				float angle = selfFacing.angle(facing);
+
+				forceDest1.set((float)(pos.x), (float)(pos.y), (float)(pos.z)).add(facing);
+				getStandardForceTo(selfPosFront, angle, forceDest1, forceDest1);
+				forceDest1.mul(power);
+
+				forceDest2.set((float)(pos.x), (float)(pos.y), (float)(pos.z)).sub(facing);
+				getStandardForceTo(selfPosFront, angle, forceDest2, forceDest2);
+				forceDest2.mul(power);
+
+				forceDest3.set((float)(pos.x), (float)(pos.y), (float)(pos.z)).add(facing);
+				getStandardForceTo(selfPosBack, angle, forceDest3, forceDest3);
+				forceDest3.mul(power);
+
+				forceDest4.set((float)(pos.x), (float)(pos.y), (float)(pos.z)).sub(facing);
+				getStandardForceTo(selfPosBack, angle, forceDest4, forceDest4);
+				forceDest4.mul(power);
+
+				float maxForce = forceDest1.lengthSquared();
+				Vector3f maxForceVec = forceDest1;
+				for (Vector3f v : new Vector3f[]{forceDest2, forceDest3, forceDest4}) {
+					float l = v.lengthSquared();
+					if (l > maxForce) {
+						maxForce = l;
+						maxForceVec = v;
+					}
+				}
+				if (maxForceVec == forceDest1 || maxForceVec == forceDest2) {
+					frontForce.add(maxForceVec);
+				} else {
+					backForce.add(maxForceVec);
+				}
 			}
-			LOGGER.info("total force " + totalForce);
+			LOGGER.info("total force " + frontForce + "; " + backForce);
 		});
 
-		VSCHForceInducedShips ships = VSCHForceInducedShips.get(level, pos);
-		if (ships != null && ships.getThrusterAtPos(pos) == null) {
-			ships.addThruster(pos, this.thrusterData);
+		VSCHForceInducedShips ships = VSCHForceInducedShips.get(level, blockPos);
+		if (ships != null && ships.getThrusterAtPos(blockPos) == null) {
+			ships.addMagnet(blockPos, this.magnetData);
 		}
 	}
 

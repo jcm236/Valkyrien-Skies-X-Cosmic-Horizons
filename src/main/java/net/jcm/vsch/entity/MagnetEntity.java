@@ -43,7 +43,7 @@ public class MagnetEntity extends Entity implements IAttachableEntity {
 
 	public void setAttachedBlockPos(BlockPos pos) {
 		this.pos = pos;
-		this.keepAlive = 3;
+		this.keepAlive = 1;
 	}
 
 	public MagnetBlockEntity getAttachedBlock() {
@@ -64,7 +64,7 @@ public class MagnetEntity extends Entity implements IAttachableEntity {
 			return;
 		}
 		this.keepAlive--;
-		if (this.pos == null || this.keepAlive <= 0) {
+		if (this.pos == null || this.keepAlive < 0) {
 			this.discard();
 			return;
 		}
