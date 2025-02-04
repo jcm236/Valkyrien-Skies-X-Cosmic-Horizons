@@ -85,7 +85,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 	 * @return the max power the magnet can activate based on the energy input
 	 */
 	public float getMaxAvaliablePower() {
-		return (float)(this.energyStorage.stored) / this.energyStorage.maxEnergyRate;
+		return this.energyStorage.maxEnergyRate == 0 ? 1.0f : (float)(this.energyStorage.stored) / this.energyStorage.maxEnergyRate;
 	}
 
 	public float getActivatablePower() {
@@ -231,16 +231,20 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		}
 
 		if (!this.isGenerator) {
-			float needEnergy = tickPower * this.energyStorage.maxEnergyRate;
-			if (needEnergy < 0) {
-				if (needEnergy < -this.energyStorage.stored) {
-					needEnergy = -this.energyStorage.stored;
+			float needEnergy = this.power * this.energyStorage.maxEnergyRate;
+			if (needEnergy == 0) {
+				this.tickPower = this.power;
+			} else {
+				if (needEnergy < 0) {
+					if (needEnergy < -this.energyStorage.stored) {
+						needEnergy = -this.energyStorage.stored;
+					}
+				} else if (needEnergy < this.energyStorage.stored) {
+					needEnergy = this.energyStorage.stored;
 				}
-			} else if (needEnergy < this.energyStorage.stored) {
-				needEnergy = this.energyStorage.stored;
+				this.energyStorage.stored -= (int)(Math.abs(needEnergy));
+				this.tickPower = needEnergy / this.energyStorage.maxEnergyRate;
 			}
-			this.energyStorage.stored -= (int)(Math.abs(needEnergy));
-			this.tickPower = needEnergy / this.energyStorage.maxEnergyRate;
 		}
 
 		if (!VSGameUtilsKt.isBlockInShipyard(this.getLevel(), this.getBlockPos())) {
