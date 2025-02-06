@@ -11,6 +11,7 @@ import net.jcm.vsch.entity.VSCHEntities;
 import net.jcm.vsch.ship.MagnetData;
 import net.jcm.vsch.ship.VSCHForceInducedShips;
 
+import net.jcm.vsch.util.VSCHUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -33,6 +34,7 @@ import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
+import java.text.NumberFormat;
 import java.util.Collections;
 import java.util.List;
 
@@ -88,9 +90,6 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		return this.energyStorage.maxEnergyRate == 0 ? 1.0f : (float)(this.energyStorage.stored) / this.energyStorage.maxEnergyRate;
 	}
 
-	public float getActivatablePower() {
-		return this.tickPower;
-	}
 
 	public void setPower(float power) {
 		this.setPower(power, true);
@@ -125,11 +124,22 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 
 	private static Vector3f getStandardForceTo(Vector3f selfPos, float angle, Vector3f pos, Vector3f dest) {
 		final double maxForce = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue();
+		final double maxDistance = VSCHConfig.MAGNET_BLOCK_DISTANCE.get().doubleValue();
+
 		pos.sub(selfPos, dest);
-		float force = (float)(maxForce / dest.lengthSquared() * Math.cos(angle));
-		// TODO: increase force when multiple magnets are stacking together
+		float distanceSquared = dest.lengthSquared();
+
+		// Distance factor in range [0, 1], where 1 is close and 0 is at max range
+		// this way max force is more evenly distributed along the magnets range
+		float distanceFactor = (float) (1.0 - Math.min(1.0, Math.sqrt(distanceSquared) / maxDistance));
+
+		// ChatGPT falloff curve, feel free to change
+		float force = (float) (maxForce * Math.pow(distanceFactor, 2) * Math.cos(angle));
+
 		return dest.normalize(force);
 	}
+
+
 
 	/**
 	 * @return the list of magnets that the current magnet is moving towards to.
@@ -172,7 +182,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			if (block == null) {
 				return false;
 			}
-			if (block.getActivatablePower() == 0) {
+			if (block.tickPower == 0) {
 				return false;
 			}
 			ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, magnet.getAttachedBlockPos());
@@ -222,6 +232,8 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			this.updatePowerByRedstone();
 		}
 		this.wasPeripheralMode = this.isPeripheralMode;
+		// ---------- //
+
 
 		// TODO: find a proper way to check if the facing is changed
 		boolean facingChanged = false;
@@ -231,21 +243,26 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		}
 
 		if (!this.isGenerator) {
-			float needEnergy = this.power * this.energyStorage.maxEnergyRate;
-			if (needEnergy == 0) {
+			// Determine the energy required for this tick
+			float requiredEnergy = this.power * this.energyStorage.maxEnergyRate;
+
+			if (requiredEnergy == 0) {
+				// No energy needed (aka we store 0 energy), directly set tickPower
 				this.tickPower = this.power;
 			} else {
-				if (needEnergy < 0) {
-					if (needEnergy < -this.energyStorage.stored) {
-						needEnergy = -this.energyStorage.stored;
-					}
-				} else if (needEnergy < this.energyStorage.stored) {
-					needEnergy = this.energyStorage.stored;
+				// Clamp required energy within the available stored energy range
+				if (requiredEnergy < 0) {
+					requiredEnergy = Math.max(requiredEnergy, -this.energyStorage.stored);
+				} else {
+					requiredEnergy = Math.min(requiredEnergy, this.energyStorage.stored);
 				}
-				this.energyStorage.stored -= (int)(Math.abs(needEnergy));
-				this.tickPower = needEnergy / this.energyStorage.maxEnergyRate;
+
+				// Consume the energy (should we use the extract function for this?)
+				this.energyStorage.stored -= (int) Math.abs(requiredEnergy);
+				this.tickPower = requiredEnergy / this.energyStorage.maxEnergyRate;
 			}
 		}
+
 
 		if (!VSGameUtilsKt.isBlockInShipyard(this.getLevel(), this.getBlockPos())) {
 			return;
@@ -259,10 +276,10 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			}
 		}
 
-		float selfPower = this.getActivatablePower();
-		if (selfPower == 0) {
+		if (tickPower == 0) {
 			return;
 		}
+
 		Vec3 selfPos = this.getLinkedEntity().position();
 		Vector3f selfFacing = this.getFacing().mul(0.4f);
 		Vector3f selfPosFront = new Vector3f((float)(selfPos.x) + selfFacing.x, (float)(selfPos.y) + selfFacing.y, (float)(selfPos.z) + selfFacing.z);
@@ -274,7 +291,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			Vector3f forceDest3 = new Vector3f();
 			Vector3f forceDest4 = new Vector3f();
 			for (MagnetEntity magnet : magnets) {
-				float power = selfPower * magnet.getAttachedBlock().getActivatablePower();
+				float power = tickPower * magnet.getAttachedBlock().tickPower;
 				Vec3 pos = magnet.position();
 				Vector3f facing = magnet.getFacing().mul(0.4f);
 				float angle = selfFacing.angle(facing);

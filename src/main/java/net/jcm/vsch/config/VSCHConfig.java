@@ -45,19 +45,23 @@ public class VSCHConfig {
 
 		BUILDER.pop();
 
+		BUILDER.push("Magnetics");
+
+		MAGNET_BOOT_DISTANCE = BUILDER.comment("Distance (in blocks) at which magnet boots will pull you in").define("magnet_boot_distance", 6);
+		MAGNET_BOOT_MAX_FORCE = BUILDER.comment("Max acceleration magnet boots will apply at close distances to move the player downwards.").define("magnet_boot_max_force", 0.09);
+
+		MAGNET_BLOCK_DISTANCE = BUILDER.comment("Distance (in blocks) at which magnet blocks will pull ships").define("magnet_block_distance", 6.0);
+		MAGNET_BLOCK_MAX_FORCE = BUILDER.comment("Max force one magnet block will apply at 1 block distance.").define("magnet_block_max_force", 50000.0);
+		MAGNET_BLOCK_CONSUME_ENERGY = BUILDER.comment("The energy a magnet block will consume when activate at max power.").define("magnet_block_consume_energy", 0);
+
+		BUILDER.pop();
+
 		BUILDER.push("Misc");
 
 		MAX_DRAG = BUILDER.comment("Max force the drag inducer can use to slow down").define("max_drag", 15000);
 		LIMIT_SPEED = BUILDER.comment("Limit speed thrusters can accelerate to. Recommended, as VS ships get funky at high speeds").define("limit_speed", true);
 		MAX_SPEED = BUILDER.comment("Max speed to limit to. Blocks/tick I think. Default is highly recommended").define("max_speed", 150);
 		CANCEL_ASSEMBLY = BUILDER.comment("Cancel multi-block assemblies when above world height. This is a temporary fix, but for now ships made above world height have issues with starlance.").define("cancel_assembly", true);
-
-		MAGNET_BOOT_DISTANCE = BUILDER.comment("Distance (in blocks) at which magnet boots will pull you in").define("magnet_boot_distance", 6);
-		MAGNET_BOOT_MAX_FORCE = BUILDER.comment("Max acceleration magnet boots will apply at close distances to move the player downwards.").define("magnet_boot_max_force", 0.09);
-
-		MAGNET_BLOCK_DISTANCE = BUILDER.comment("Distance (in blocks) at which magnet blocks will pull ships").define("magnet_block_distance", 6.0);
-		MAGNET_BLOCK_MAX_FORCE = BUILDER.comment("Max force one magnet block will apply at 1 block distance.").define("magnet_block_max_force", 1e5);
-		MAGNET_BLOCK_CONSUME_ENERGY = BUILDER.comment("The energy a magnet block will consume when activate at max power.").define("magnet_block_consume_energy", 1000000);
 
 		BUILDER.pop();
 
