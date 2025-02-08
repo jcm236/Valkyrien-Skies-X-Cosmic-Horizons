@@ -11,6 +11,7 @@ import net.jcm.vsch.entity.VSCHEntities;
 import net.jcm.vsch.ship.MagnetData;
 import net.jcm.vsch.ship.VSCHForceInducedShips;
 
+import net.jcm.vsch.util.VSCHUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -33,6 +34,7 @@ import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
+import java.text.NumberFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -242,21 +244,26 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		}
 
 		if (!this.isGenerator) {
-			float needEnergy = this.power * this.energyStorage.maxEnergyRate;
-			if (needEnergy == 0) {
+			// Determine the energy required for this tick
+			float requiredEnergy = this.power * this.energyStorage.maxEnergyRate;
+
+			if (requiredEnergy == 0) {
+				// No energy needed (aka we store 0 energy), directly set tickPower
 				this.tickPower = this.power;
 			} else {
-				if (needEnergy < 0) {
-					if (needEnergy < -this.energyStorage.stored) {
-						needEnergy = -this.energyStorage.stored;
-					}
-				} else if (needEnergy < this.energyStorage.stored) {
-					needEnergy = this.energyStorage.stored;
+				// Clamp required energy within the available stored energy range
+				if (requiredEnergy < 0) {
+					requiredEnergy = Math.max(requiredEnergy, -this.energyStorage.stored);
+				} else {
+					requiredEnergy = Math.min(requiredEnergy, this.energyStorage.stored);
 				}
-				this.energyStorage.stored -= (int)(Math.abs(needEnergy));
-				this.tickPower = needEnergy / this.energyStorage.maxEnergyRate;
+
+				// Consume the energy
+				this.energyStorage.stored -= (int) Math.abs(requiredEnergy);
+				this.tickPower = requiredEnergy / this.energyStorage.maxEnergyRate;
 			}
 		}
+
 
 		if (!VSGameUtilsKt.isBlockInShipyard(this.getLevel(), this.getBlockPos())) {
 			return;
@@ -283,11 +290,14 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			Vector3f selfPosBack = new Vector3f().set(selfPos).sub(selfFacing);
 			Vector3f forceDest = new Vector3f();
 			for (MagnetBlockEntity block : magnetBlocks) {
-				float power = selfPower * block.getActivatablePower() / 4;
-
 				Vector3d pos = block.getWorldPos();
-				Vector3f facing = block.getFacing().mul(0.4f);
+				if (selfPos.distanceSquared(pos) <= 0.161f) {
+					continue;
+				}
+
+				Vector3f facing = block.getFacing().mul(0.4f);;
 				float angle = selfFacing.angle(facing);
+				float power = selfPower * block.getActivatablePower() / 4;
 
 				forceDest.set(pos).add(facing);
 				getStandardForceTo(selfPosFront, angle, forceDest, forceDest);
