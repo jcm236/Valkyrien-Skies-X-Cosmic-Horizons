@@ -1,10 +1,5 @@
 package net.jcm.vsch.ship;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import javax.annotation.Nullable;
-
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -24,6 +19,12 @@ import net.jcm.vsch.util.VSCHUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+
+import javax.annotation.Nullable;
 
 @SuppressWarnings("deprecation")
 public class VSCHForceInducedShips implements ShipForcesInducer {
@@ -102,15 +103,19 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 			}
 		});
 
+		Vector3d frontForce = new Vector3d();
+		Vector3d backForce = new Vector3d();
 		magnets.forEach((blockPos, data) -> {
 			ShipTransform transform = physicShip.getTransform();
 			Vector3f facing = data.facing;
-			Vector3d frontForce = data.frontForce;
-			Vector3d backForce = data.backForce;
+			BiConsumer<Vector3d, Vector3d> forceCalculator = data.forceCalculator;
+			frontForce.set(0, 0, 0);
+			backForce.set(0, 0, 0);
 			Vector3d frontPos = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5)
 				.sub(transform.getPositionInShip())
 				.add(facing.div(2, new Vector3f()));
 			Vector3d backPos = frontPos.sub(facing, new Vector3d());
+			forceCalculator.accept(frontForce, backForce);
 
 			if (VSCHConfig.LIMIT_SPEED.get()) {
 				int maxSpeed = VSCHConfig.MAX_SPEED.get().intValue();

@@ -70,15 +70,13 @@ public class MagnetEntity extends Entity implements IAttachableEntity {
 			return;
 		}
 
-		double x = this.pos.getX() + 0.5, y = this.pos.getY() + 0.5, z = this.pos.getZ() + 0.5;
-		ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, this.pos);
-		if (ship != null) {
-			Vector3d vec3d = ship.getShipToWorld().transformPosition(new Vector3d(x, y, z));
-			x = vec3d.x;
-			y = vec3d.y;
-			z = vec3d.z;
+		MagnetBlockEntity block = this.getAttachedBlock();
+		if (block == null) {
+			this.discard();
+			return;
 		}
-		this.setPosRaw(x, y, z);
+		Vector3d pos = block.getWorldPos();
+		this.setPosRaw(pos.x, pos.y, pos.z);
 	}
 
 	@Override
