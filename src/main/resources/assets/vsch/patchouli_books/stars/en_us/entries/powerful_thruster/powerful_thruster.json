@@ -1,0 +1,11 @@
+{
+    "name": "Powerful Thruster",
+    "icon": "vsch:powerful_thruster_block",
+    "category": "vsch:blocks",
+    "pages": [
+        {
+            "type": "patchouli:text",
+            "text": "Le creme d'la creme. You aren't getting faster than this ☺"
+        }
+    ]
+}

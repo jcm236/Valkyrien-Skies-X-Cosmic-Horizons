@@ -10,5 +10,9 @@
   {
      "block": "vsch:powerful_thruster_block",
      "mass": 100
-   }
+   },
+  {
+    "block": "vsch:drag_inducer_block",
+    "mass": 100
+  }
 ]

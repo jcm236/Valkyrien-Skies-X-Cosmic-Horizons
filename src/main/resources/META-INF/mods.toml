@@ -67,28 +67,30 @@ license = "${mod_license}"
 [[dependencies.${mod_id}]]
 	modId = "valkyrienskies"
 	mandatory = true
-	versionRange = "(,${vs2_version}]"
+	# With this version, we can support all VS beta.5's, even Tank Tussle,
+	# but will still crash with next VS update which changes the API
+	versionRange = "(,2.4.0)"
 	ordering = "AFTER"
 	side = "BOTH"
 
 [[dependencies.${mod_id}]]
 	modId = "cosmos"
 	mandatory = true
-	versionRange = "[${cosmos_version},)"
+	versionRange = "[0.0.7.2,)"
 	ordering = "AFTER"
 	side = "BOTH"
 
 [[dependencies.${mod_id}]]
 	modId = "computercraft"
 	mandatory = false
-	versionRange = "[${cc_version},)"
+	versionRange = "*"
 	ordering = "AFTER"
 	side = "BOTH"
 
 [[dependencies.${mod_id}]]
 	modId = "create"
 	mandatory = false
-	versionRange = "[${create_version},)"
+	versionRange = "*"
 	ordering = "AFTER"
 	side = "BOTH"
 

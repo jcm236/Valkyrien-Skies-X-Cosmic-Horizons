@@ -30,12 +30,12 @@ public class DockerBlockEntity extends BlockEntity {
 	}
 
 	public void serverTick(Level level, BlockPos pos, BlockState state, DockerBlockEntity be) {
-		HitResult hitResult = level.clip(new ClipContext(
-			pos.getCenter(),
-			pos.getCenter().add(new Vec3(0, 10, 0)),
-			ClipContext.Block.COLLIDER,
-			ClipContext.Fluid.NONE,
-			null));
-		System.out.println(hitResult);
+//		HitResult hitResult = level.clip(new ClipContext(
+//			pos.getCenter(),
+//			pos.getCenter().add(new Vec3(0, 10, 0)),
+//			ClipContext.Block.COLLIDER,
+//			ClipContext.Fluid.NONE,
+//			null));
+//		System.out.println(hitResult);
 	}
 }

@@ -1,0 +1,11 @@
+{
+    "name": "Drag inducer",
+    "icon": "vsch:drag_inducer_block",
+    "category": "vsch:blocks",
+    "pages": [
+        {
+            "type": "patchouli:text",
+            "text": "Causes artificial drag to be applied to your ship when powered with redstone. Useful for coming to a complete stop in space."
+        }
+    ]
+}

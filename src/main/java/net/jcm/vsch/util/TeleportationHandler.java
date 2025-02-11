@@ -117,6 +117,8 @@ public class TeleportationHandler {
             if (collectEntity(entity, id,ship, shipNewPos) && entity.isVehicle()) {
                 entity.getPassengers().forEach(e -> {
                     passengerVehicleMap.put(e, entity);
+                    // Dismout the passengers to prevent problems
+                    e.dismountTo(e.getX(), e.getY(), e.getZ());
                     collectEntity(entity, id,ship, shipNewPos);
                 });
             }

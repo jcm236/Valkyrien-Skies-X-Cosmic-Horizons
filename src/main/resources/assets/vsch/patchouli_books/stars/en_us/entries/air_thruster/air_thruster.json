@@ -1,0 +1,11 @@
+{
+    "name": "Air Thruster",
+    "icon": "vsch:air_thruster_block",
+    "category": "vsch:blocks",
+    "pages": [
+        {
+            "type": "patchouli:text",
+            "text": "This is the most basic type of thruster, often only used for maneuverability in space"
+        }
+    ]
+}

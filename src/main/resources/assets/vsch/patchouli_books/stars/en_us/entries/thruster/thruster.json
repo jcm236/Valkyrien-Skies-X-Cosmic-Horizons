@@ -1,0 +1,11 @@
+{
+    "name": "Thruster",
+    "icon": "vsch:thruster_block",
+    "category": "vsch:blocks",
+    "pages": [
+        {
+            "type": "patchouli:text",
+            "text": "Good quality thruster, used to navigate in space or in a planet at medium velocities with good maneuverability"
+        }
+    ]
+}

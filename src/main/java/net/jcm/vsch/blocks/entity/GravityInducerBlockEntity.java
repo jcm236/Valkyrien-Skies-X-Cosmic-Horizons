@@ -19,14 +19,19 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import java.util.List;
 
 public class GravityInducerBlockEntity extends BlockEntity implements ParticleBlockEntity {
-
+	private static final double MIN_FORCE = 0.01;
 	public GravityInducerBlockEntity(BlockPos pos, BlockState blockState) {
 		super(VSCHBlockEntities.GRAVITY_INDUCER_BLOCK_ENTITY.get(), pos, blockState);
 	}
 
-	public Vec3 getForce() {
-		return new Vec3(0, 1, 0);
+
+	public double getAttractDistance() {
+		return VSCHConfig.GRAVITY_DISTANCE.get().doubleValue();
 	}
+	public double getMaxForce() {
+		return VSCHConfig.GRAVITY_MAX_FORCE.get().doubleValue();
+	}
+
 
 	@Override
 	public void tickForce(ServerLevel level, BlockPos pos, BlockState state) {
@@ -34,7 +39,6 @@ public class GravityInducerBlockEntity extends BlockEntity implements ParticleBl
 		if (ship == null) {
 			return;
 		}
-		Vec3 force = getForce();
 		List<Entity> entities = level.getEntities(null, VectorConversionsMCKt.toMinecraft(ship.getWorldAABB()));
 		for (Entity entity : entities) {
 			if (entity.noPhysics) {
@@ -45,8 +49,25 @@ public class GravityInducerBlockEntity extends BlockEntity implements ParticleBl
 					continue;
 				}
 			}
+			double maxDistance = getAttractDistance();
 
-			entity.setDeltaMovement(entity.getDeltaMovement().add(force));
+			Vec3 direction = new Vec3(0, -1, 0); // TODO: maybe we can change the direction to match the ship that player stands on?
+			Vec3 startPos = entity.position(); // Starting position (player's position)
+			Vec3 endPos = startPos.add(direction.scale(maxDistance));
+			HitResult hitResult = level.clip(new ClipContext(
+					startPos,
+					endPos,
+					ClipContext.Block.COLLIDER, // Raycast considers block collision shapes, maybe we don't want this?
+					ClipContext.Fluid.NONE,     // Ignore fluids
+					entity
+			));
+			double distance = startPos.distanceToSqr(hitResult.getLocation());
+			double scaledForce = Math.min(maxDistance * maxDistance / distance * MIN_FORCE, getMaxForce());
+
+			Vec3 force = direction.scale(scaledForce);
+			System.out.println(entity);
+			System.out.println(force);
+			entity.push(force.x, force.y, force.z);
 		}
 	}
 

@@ -29,6 +29,8 @@ public class VSCHConfig {
 
 	public static final ForgeConfigSpec.ConfigValue<Number> MAGNET_BOOT_DISTANCE;
 	public static final ForgeConfigSpec.ConfigValue<Number> MAGNET_BOOT_MAX_FORCE;
+	public static final ForgeConfigSpec.ConfigValue<Number> GRAVITY_DISTANCE;
+	public static final ForgeConfigSpec.ConfigValue<Number> GRAVITY_MAX_FORCE;
 
 	public static final ForgeConfigSpec.ConfigValue<Double> MAGNET_BLOCK_DISTANCE;
 	public static final ForgeConfigSpec.ConfigValue<Double> MAGNET_BLOCK_MAX_FORCE;
@@ -62,12 +64,14 @@ public class VSCHConfig {
 		LIMIT_SPEED = BUILDER.comment("Limit speed thrusters can accelerate to. Recommended, as VS ships get funky at high speeds").define("limit_speed", true);
 		MAX_SPEED = BUILDER.comment("Max speed to limit to. Blocks/tick I think. Default is highly recommended").define("max_speed", 150);
 		CANCEL_ASSEMBLY = BUILDER.comment("Cancel multi-block assemblies when above world height. This is a temporary fix, but for now ships made above world height have issues with starlance.").define("cancel_assembly", true);
+		GRAVITY_DISTANCE = BUILDER.comment("Distance (in blocks) at which gravity generator will pull you in").define("gravity_gen_distance", 6);
+		GRAVITY_MAX_FORCE = BUILDER.comment("Max acceleration gravity generator will apply at close distances to move the player downwards.").define("gravity_gen_max_force", 0.09);
 
 		BUILDER.pop();
 
 		SPEC = BUILDER.build();
 	}
 	public static void register(ModLoadingContext context){
-		context.registerConfig(ModConfig.Type.COMMON, VSCHConfig.SPEC, "vsch-config.toml");
+		context.registerConfig(ModConfig.Type.SERVER, VSCHConfig.SPEC, "vsch-config.toml");
 	}
 }

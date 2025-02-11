@@ -1,0 +1,11 @@
+{
+    "name": "Wrench",
+    "icon": "vsch:wrench",
+    "category": "vsch:items",
+    "pages": [
+        {
+            "type": "patchouli:text",
+            "text": "Allows you to change the mode of thrusers. When in GLOBAL mode, thrusters will apply force along the entire ship. In POSITION mode, they will apply the force at their position. POSITION mode can cause unwanted rotation with un-balanced thruster placements, which is where GLOBAL mode helps. Thrusters default to POSITION mode (can be changed in the config)."
+        }
+    ]
+}

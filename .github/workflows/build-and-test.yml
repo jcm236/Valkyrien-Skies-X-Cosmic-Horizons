@@ -24,7 +24,6 @@ jobs:
       - name: Gradle Check
         run: ./gradlew check
   build:
-    if: ${{ github.event_name != 'push' }}
     name: Build
     runs-on: ubuntu-latest
     needs: test
@@ -42,12 +41,16 @@ jobs:
           output HEAD_SHA "${{ github.sha }}"
       - name: Gradle Build
         run: ./gradlew build "-Dmod_artifact_suffix=-pr${{ github.event.number }}-$(git rev-parse --short ${{ github.sha }})"
+      - name: Rename build Artifact
+        run: mv build/reobfJar/output.jar build/reobfJar/starlance-production-mapped.jar
       - name: Upload Build Artifacts
         id: artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ format('Starlance PR {0}', github.event.number) }}
-          path: build/libs
+          name: ${{ format('Starlance Artifacts PR {0}', github.event.number) }}
+          path: |
+            build/libs
+            build/reobfJar/starlance-production-mapped.jar
           overwrite: true
           if-no-files-found: error
       - name: LOG-METADATA-2

@@ -1,0 +1,11 @@
+{
+    "name": "Magnetic boots",
+    "icon": "vsch:magnet_boot",
+    "category": "vsch:items",
+    "pages": [
+        {
+            "type": "patchouli:text",
+            "text": "Magnetic boots. Pulls you towards blocks below, useful as artificial gravity in space."
+        }
+    ]
+}

@@ -258,7 +258,8 @@ tasks.named('processResources', ProcessResources).configure {
             loader_version_range: loader_version_range,
             mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
             mod_authors: mod_authors, mod_description: mod_description,
-            vs2_version: vs2_version,
+            // This property isn't used right now in mods.toml
+            vs2_version: vs2_version.split("\\+").first(), //gradle.properties will have git commit version, but public releases won't
             cosmos_version: cosmos_version,
             cc_version: cc_version,
             create_version: create_version.split("-").first(), //Our version is 0.5.1j-55, but we support any 0.5.1j
