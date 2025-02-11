@@ -106,51 +106,64 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		Vector3d frontForce = new Vector3d();
 		Vector3d backForce = new Vector3d();
 		magnets.forEach((blockPos, data) -> {
-			ShipTransform transform = physicShip.getTransform();
 			Vector3f facing = data.facing;
 			BiConsumer<Vector3d, Vector3d> forceCalculator = data.forceCalculator;
 			frontForce.set(0, 0, 0);
 			backForce.set(0, 0, 0);
+			forceCalculator.accept(frontForce, backForce);
+			boolean hasFrontForce = frontForce.lengthSquared() != 0;
+			boolean hasBackForce = backForce.lengthSquared() != 0;
+			if (!hasFrontForce && !hasBackForce) {
+				return;
+			}
+			ShipTransform transform = physicShip.getTransform();
 			Vector3d frontPos = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5)
 				.sub(transform.getPositionInShip())
 				.add(facing.div(2, new Vector3f()));
 			Vector3d backPos = frontPos.sub(facing, new Vector3d());
-			forceCalculator.accept(frontForce, backForce);
 
 			if (VSCHConfig.LIMIT_SPEED.get()) {
 				int maxSpeed = VSCHConfig.MAX_SPEED.get().intValue();
 				Vector3dc linearVelocity = physShip.getPoseVel().getVel();
 				if (linearVelocity.lengthSquared() >= maxSpeed * maxSpeed) {
-					if (frontForce.dot(linearVelocity) > 0) {
-						Vector3d parallel = new Vector3d(frontPos).mul(frontForce.dot(frontPos) / frontForce.dot(frontForce));
-						Vector3d perpendicular = new Vector3d(frontForce).sub(parallel);
+					if (hasFrontForce) {
+						if (frontForce.dot(linearVelocity) > 0) {
+							Vector3d parallel = new Vector3d(frontPos).mul(frontForce.dot(frontPos) / frontForce.dot(frontForce));
+							Vector3d perpendicular = new Vector3d(frontForce).sub(parallel);
 
-						// rotate the ship
-						physicShip.applyInvariantForceToPos(perpendicular, frontPos);
+							// rotate the ship
+							physicShip.applyInvariantForceToPos(perpendicular, frontPos);
 
-						// apply global force, since the force is perfectly lined up with the centre of gravity
-						applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
-					} else {
-						physicShip.applyInvariantForceToPos(frontForce, frontPos);
+							// apply global force, since the force is perfectly lined up with the centre of gravity
+							applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
+						} else {
+							physicShip.applyInvariantForceToPos(frontForce, frontPos);
+						}
 					}
-					if (backForce.dot(linearVelocity) > 0) {
-						Vector3d parallel = new Vector3d(backPos).mul(backForce.dot(backPos) / backForce.dot(backForce));
-						Vector3d perpendicular = new Vector3d(backForce).sub(parallel);
+					if (hasBackForce) {
+						if (backForce.dot(linearVelocity) > 0) {
+							Vector3d parallel = new Vector3d(backPos).mul(backForce.dot(backPos) / backForce.dot(backForce));
+							Vector3d perpendicular = new Vector3d(backForce).sub(parallel);
 
-						// rotate the ship
-						physicShip.applyInvariantForceToPos(perpendicular, backPos);
+							// rotate the ship
+							physicShip.applyInvariantForceToPos(perpendicular, backPos);
 
-						// apply global force, since the force is perfectly lined up with the centre of gravity
-						applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
-					} else {
-						physicShip.applyInvariantForceToPos(backForce, backPos);
+							// apply global force, since the force is perfectly lined up with the centre of gravity
+							applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
+						} else {
+							physicShip.applyInvariantForceToPos(backForce, backPos);
+						}
 					}
 					return;
 				}
 			}
 
-			physicShip.applyInvariantForceToPos(frontForce, frontPos);
-			physicShip.applyInvariantForceToPos(backForce, backPos);
+			if (hasFrontForce) {
+				physicShip.applyInvariantForceToPos(frontForce, frontPos);
+			}
+			if (hasBackForce) {
+				physicShip.applyInvariantForceToPos(backForce, backPos);
+			}
 		});
 
 		// Prep for draggers
