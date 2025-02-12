@@ -24,21 +24,15 @@ public class MagnetPeripheral implements IPeripheral {
 		return "starlance_magnet";
 	}
 
-	// @LuaFunction(mainThread = true)
-	// public String getMode() {
-	// 	return this.entity.getThrusterMode().toString();
-	// }
+	@LuaFunction
+	public boolean isGenerator() {
+		return this.entity.getIsGenerator();
+	}
 
-	// @LuaFunction(mainThread = true)
-	// public void setMode(String mode) throws LuaException {
-	// 	ThrusterData.ThrusterMode tmode;
-	// 	try {
-	// 		tmode = ThrusterData.ThrusterMode.valueOf(mode.toUpperCase());
-	// 	} catch (IllegalArgumentException e) {
-	// 		throw new LuaException("unknown thruster mode");
-	// 	}
-	// 	this.entity.setThrusterMode(tmode);
-	// }
+	@LuaFunction
+	public void setGenerator(boolean isGenerator) {
+		this.entity.setIsGenerator(isGenerator);
+	}
 
 	@LuaFunction
 	public boolean getPeripheralMode() {

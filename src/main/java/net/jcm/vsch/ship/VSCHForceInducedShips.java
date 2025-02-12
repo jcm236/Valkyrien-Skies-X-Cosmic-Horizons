@@ -22,7 +22,6 @@ import net.minecraft.world.level.Level;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiConsumer;
 
 import javax.annotation.Nullable;
 
@@ -107,10 +106,17 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		Vector3d backForce = new Vector3d();
 		magnets.forEach((blockPos, data) -> {
 			Vector3f facing = data.facing;
-			BiConsumer<Vector3d, Vector3d> forceCalculator = data.forceCalculator;
+			boolean isGenerator = data.isGenerator;
+			MagnetData.ForceCalculator forceCalculator = data.forceCalculator;
 			frontForce.set(0, 0, 0);
 			backForce.set(0, 0, 0);
-			forceCalculator.accept(frontForce, backForce);
+			forceCalculator.calc(physShip, frontForce, backForce);
+			if (isGenerator) {
+				physShip.applyInvariantForce(frontForce);
+				physShip.applyInvariantTorque(backForce);
+				return;
+			}
+
 			boolean hasFrontForce = frontForce.lengthSquared() != 0;
 			boolean hasBackForce = backForce.lengthSquared() != 0;
 			if (!hasFrontForce && !hasBackForce) {
@@ -183,9 +189,6 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 			//angularVelocity.cross(relativePosition, rotationalVelocity);
 
 			// Add linear and rotational velocities
-			//Vector3d totalVelocity = new Vector3d(linearVelocity).add(rotationalVelocity);
-
-			//Vector3d acceleration = totalVelocity.negate();
 			Vector3d acceleration = linearVelocity.negate(new Vector3d());
 			Vector3d force = acceleration.mul(physShip.getInertia().getShipMass());
 
