@@ -46,7 +46,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
-	private static final double MAGNET_GENERATE_RATE = 1e3; // FE/m
+	private static final double MAGNET_GENERATE_RATE = 5e2; // FE/m
+	private static final double MAGNET_GENERATE_LOSS = 10; // FE/t
 
 	private Vec3 facing; // TODO: update facing as block updated
 	private final MagnetData magnetData;
@@ -89,7 +90,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		Vector3d vec3 = new Vector3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
 		Ship ship = VSGameUtilsKt.getShipObjectManagingPos(this.getLevel(), pos);
 		if (ship != null) {
-			ship.getPrevTickTransform().getShipToWorld().transformPosition(vec3);
+			ship.getShipToWorld().transformPosition(vec3);
 		}
 		return vec3;
 	}
@@ -98,7 +99,7 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		Vector3f facing = this.facing.toVector3f();
 		Ship ship = VSGameUtilsKt.getShipObjectManagingPos(this.getLevel(), this.getBlockPos());
 		if (ship != null) {
-			facing = ship.getPrevTickTransform().getShipToWorld().transformDirection(facing);
+			facing = ship.getShipToWorld().transformDirection(facing);
 		}
 		return facing;
 	}
@@ -265,9 +266,11 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 		}
 
 		if (this.isGenerator) {
-			double lastGenerated = this.lastGenerated.sumThenReset();
-			System.out.println("lastGenerated: " + this + ": " + lastGenerated);
-			this.energyStorage.stored = Math.min(this.energyStorage.stored + (int) (lastGenerated), this.energyStorage.maxEnergyRate);
+			int lastGenerated = (int) this.lastGenerated.sumThenReset();
+			lastGenerated -= MAGNET_GENERATE_LOSS;
+			if (lastGenerated > 0) {
+				this.energyStorage.stored = Math.min(this.energyStorage.stored + lastGenerated, this.energyStorage.maxEnergyRate);
+			}
 		} else {
 			// Determine the energy required for this tick
 			float requiredEnergy = this.power * this.energyStorage.maxEnergyRate;
@@ -321,21 +324,36 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 			this.magnetData.forceCalculator = MagnetData.EMPTY_FORCE;
 		} else if (this.isGenerator) {
 			final double MAX_FORCE_MULTIPLIER = VSCHConfig.MAGNET_BLOCK_MAX_FORCE.get().doubleValue();
-			double selfRadius = selfShip.getTransform().getPositionInShip().distance(new Vector3d(selfBlockPos.getX() + 0.5, selfBlockPos.getY() + 0.5, selfBlockPos.getZ() + 0.5));
+			Vector3d selfPosInShip = new Vector3d(selfBlockPos.getX() + 0.5, selfBlockPos.getY() + 0.5, selfBlockPos.getZ() + 0.5).sub(selfShip.getTransform().getPositionInShip());
+			double selfRadius = selfPosInShip.length();
 			this.magnetData.forceCalculator = (physShip, totalForce, totalTorque) -> {
-				double deltaTime = 1.0 / (VSGameUtilsKt.getVsPipeline(ValkyrienSkiesMod.getCurrentServer()).computePhysTps());
-				Vector3d selfPos = this.getWorldPos();
-				final double shipMass = physShip.getInertia().getShipMass();
-				double forceMultiplier = Math.min(shipMass, MAX_FORCE_MULTIPLIER);
-				Vector3dc selfLinearVel = physShip.getPoseVel().getVel();
-				Vector3dc selfAngularVel = physShip.getPoseVel().getOmega();
-				Vector3d selfVelocity = selfAngularVel.mul(selfRadius, new Vector3d());
-				double linearVelDist = selfLinearVel.length();
-				double angularVelDist = selfVelocity.length();
-				if (linearVelDist == 0 && angularVelDist == 0) {
+				double tps = VSGameUtilsKt.getVsPipeline(ValkyrienSkiesMod.getCurrentServer()).computePhysTps();
+				if (tps == 0) {
 					return;
 				}
-				double linearWeight = linearVelDist / (linearVelDist + angularVelDist);
+				double dt = 1.0 / tps;
+				Vector3d selfPos = this.getWorldPos();
+				final double shipMass = physShip.getInertia().getShipMass();
+				double forceMultiplier = MAX_FORCE_MULTIPLIER * 2;
+				Vector3dc selfLinearVel = physShip.getPoseVel().getVel();
+				Vector3d selfAngularVel = physShip.getPoseVel().getOmega().mul(selfRadius, new Vector3d());
+				// TODO: need fix
+				selfAngularVel.set(
+					selfAngularVel.y * Math.sin(Math.atan2(selfPosInShip.z, selfPosInShip.x) + Math.PI / 2) +
+						selfAngularVel.z * Math.sin(Math.atan2(selfPosInShip.x, selfPosInShip.y) + Math.PI / 2),
+					selfAngularVel.x * Math.sin(Math.atan2(selfPosInShip.y, selfPosInShip.z) + Math.PI / 2) +
+						selfAngularVel.z * Math.cos(Math.atan2(selfPosInShip.x, selfPosInShip.y) + Math.PI / 2),
+					selfAngularVel.y * Math.cos(Math.atan2(selfPosInShip.z, selfPosInShip.x) + Math.PI / 2) +
+						selfAngularVel.x * Math.cos(Math.atan2(selfPosInShip.y, selfPosInShip.z) + Math.PI / 2)
+				);
+				selfShip.getShipToWorld().transformDirection(selfAngularVel);
+				Vector3d selfVelocity = new Vector3d(selfAngularVel);
+				double linearDist = selfLinearVel.length();
+				double angularDist = selfVelocity.length();
+				if (linearDist == 0 && angularDist == 0) {
+					return;
+				}
+				double linearWeight = linearDist / (linearDist + angularDist);
 				selfVelocity.add(selfLinearVel);
 				this.lastVeloctiy = new Vector3d(selfVelocity);
 				Vector3d velocityDiff = new Vector3d();
@@ -344,16 +362,30 @@ public class MagnetBlockEntity extends BlockEntityWithEntity<MagnetEntity> {
 					Vector3d otherVelocity = block.lastVeloctiy;
 					double dist = selfPos.distanceSquared(pos);
 
-					velocityDiff.set(otherVelocity).sub(selfVelocity).mul(0.5);
-					double force = 1e2 * velocityDiff.length() * deltaTime / dist;
-					selfVelocity.sub(velocityDiff);
+					otherVelocity.sub(selfVelocity, velocityDiff).mul(0.5);
+					block.lastGenerated.add(MAGNET_GENERATE_RATE * velocityDiff.length() * dt / dist);
+
 					velocityDiff.mul(forceMultiplier / dist);
-					totalForce.add(velocityDiff.x * linearWeight, velocityDiff.y * linearWeight, velocityDiff.z * linearWeight);
-					if (selfRadius > 0.01) {
-						totalTorque.add(velocityDiff.mul((1 - linearWeight) / selfRadius));
+					Vector3d changingVel = velocityDiff.mul(dt / shipMass, new Vector3d());
+					totalForce.add(velocityDiff.mul(linearWeight, new Vector3d()));
+					if (angularDist > 0 && selfRadius > 0) {
+						velocityDiff.mul(1 - linearWeight);
+						selfShip.getWorldToShip().transformDirection(velocityDiff);
+						// TODO: need fix
+						totalTorque.add(
+							Math.copySign(Math.sqrt(velocityDiff.x * velocityDiff.x + velocityDiff.y * velocityDiff.y), -velocityDiff.x * velocityDiff.y) /
+								Math.sqrt(selfPosInShip.x * selfPosInShip.x + selfPosInShip.y * selfPosInShip.y),
+							Math.copySign(Math.sqrt(velocityDiff.y * velocityDiff.y + velocityDiff.z * velocityDiff.z), -velocityDiff.y * velocityDiff.z) /
+								Math.sqrt(selfPosInShip.y * selfPosInShip.y + selfPosInShip.z * selfPosInShip.z),
+							Math.copySign(Math.sqrt(velocityDiff.x * velocityDiff.x + velocityDiff.z * velocityDiff.z), -velocityDiff.x * velocityDiff.z) /
+								Math.sqrt(selfPosInShip.x * selfPosInShip.x + selfPosInShip.z * selfPosInShip.z)
+						);
 					}
-					double generated = MAGNET_GENERATE_RATE * force * deltaTime;
-					block.lastGenerated.add(generated);
+
+					selfVelocity.add(changingVel);
+					if (selfVelocity.lengthSquared() < 1e-6) {
+						break;
+					}
 				}
 			};
 		} else {

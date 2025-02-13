@@ -105,6 +105,7 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		Vector3d frontForce = new Vector3d();
 		Vector3d backForce = new Vector3d();
 		magnets.forEach((blockPos, data) -> {
+			Vector3d centerPos = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
 			Vector3f facing = data.facing;
 			boolean isGenerator = data.isGenerator;
 			MagnetData.ForceCalculator forceCalculator = data.forceCalculator;
@@ -123,9 +124,7 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 				return;
 			}
 			ShipTransform transform = physicShip.getTransform();
-			Vector3d frontPos = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5)
-				.sub(transform.getPositionInShip())
-				.add(facing.div(2, new Vector3f()));
+			Vector3d frontPos = centerPos.sub(transform.getPositionInShip(), new Vector3d()).add(facing.div(2, new Vector3f()));
 			Vector3d backPos = frontPos.sub(facing, new Vector3d());
 
 			if (VSCHConfig.LIMIT_SPEED.get()) {
