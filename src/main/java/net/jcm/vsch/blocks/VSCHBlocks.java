@@ -52,28 +52,25 @@ public class VSCHBlocks {
 					.strength(5f)
 					.noOcclusion()));
 
-	/*public static final RegistryObject<Block> MAGNET_BLOCK = registerBlock("magnet_block",
+	public static final RegistryObject<Block> MAGNET_BLOCK = registerBlock("magnet_block",
 			() -> new MagnetBlock(BlockBehaviour.Properties.copy(Blocks.IRON_BLOCK).sound(SoundType.COPPER)
 					.strength(5f)
-					.noOcclusion()));*/
+					.noOcclusion()));
 
 
-	//below is just tools used in adding the block
+	// below is just tools used in adding the block
 	private static <T extends Block> RegistryObject<T> registerBlock(String name, Supplier<T> block) {
 		RegistryObject<T> toReturn = BLOCKS.register(name, block); //registers the block
 		registerBlockItem(name, toReturn); //registers the item for the block
 		return toReturn; //returns something or other idk
 	}
 
-
-	//since when registering it doesnt have an item, this function manually adds an item
+	// since when registering it doesnt have an item, this function manually adds an item
 	private static <T extends Block> RegistryObject<Item> registerBlockItem(String name, RegistryObject<T> block) {
 		return VSCHItems.ITEMS.register(name, () -> new BlockItem(block.get(), new Item.Properties()));
 	}
 
-
-
-	//register
+	// register
 	public static void register(IEventBus eventBus) {
 		BLOCKS.register(eventBus);
 	}

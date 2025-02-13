@@ -1,16 +1,13 @@
 package net.jcm.vsch.ship;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import javax.annotation.Nullable;
-
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.Vector3f;
 import org.valkyrienskies.core.api.ships.PhysShip;
 import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.ShipForcesInducer;
+import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.core.impl.game.ships.PhysShipImpl;
 import org.valkyrienskies.core.impl.program.VSCoreImpl;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
@@ -23,6 +20,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.annotation.Nullable;
+
 @SuppressWarnings("deprecation")
 public class VSCHForceInducedShips implements ShipForcesInducer {
 
@@ -31,6 +33,7 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 	 * Instead, look at {@link #addThruster(BlockPos, ThrusterData)} or {@link #removeThruster(BlockPos)} or {@link #getThrusterAtPos(BlockPos)}
 	 */
 	public Map<BlockPos, ThrusterData> thrusters = new ConcurrentHashMap<>();
+	private Map<BlockPos, MagnetData> magnets = new ConcurrentHashMap<>();
 
 	/**
 	 * Don't mess with this unless you know what your doing. I'm making it public for all the people that do know what their doing.
@@ -51,51 +54,36 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		PhysShipImpl physShip = (PhysShipImpl) physicShip;
 		// Apply thrusters force
 		thrusters.forEach((pos, data) -> {
-			// Get current thrust from thruster
-			float throttle = data.throttle;
-			if (throttle == 0.0f) {
+			if (data.force.lengthSquared() == 0.0f) {
 				return;
 			}
 
 			// Transform force direction from ship relative to world relative
-			Vector3d tForce = physShip.getTransform().getShipToWorld().transformDirection(data.dir, new Vector3d());
-			tForce.mul(throttle);
-
-
-			Vector3dc linearVelocity = physShip.getPoseVel().getVel();
+			Vector3d tForce = physicShip.getTransform().getShipToWorld().transformDirection(data.force, new Vector3d());
 
 			if (VSCHConfig.LIMIT_SPEED.get()) {
-
 				int maxSpeed = VSCHConfig.MAX_SPEED.get().intValue();
-
-				if (Math.abs(linearVelocity.length()) >= maxSpeed) {
-
+				Vector3dc linearVelocity = physShip.getPoseVel().getVel();
+				if (linearVelocity.lengthSquared() >= maxSpeed * maxSpeed) {
 					double dotProduct = tForce.dot(linearVelocity);
-
 					if (dotProduct > 0) {
+						switch (data.mode) {
+							case GLOBAL -> applyScaledForce(physShip, linearVelocity, tForce, maxSpeed);
+							case POSITION -> {
+								// POSITION should be the only other value
+								Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
+									.add(0.5, 0.5, 0.5)
+									.sub(physicShip.getTransform().getPositionInShip());
 
-						if (data.mode == ThrusterData.ThrusterMode.GLOBAL) {
+								Vector3d parallel = new Vector3d(tPos).mul(tForce.dot(tPos) / tForce.dot(tForce));
+								Vector3d perpendicular = new Vector3d(tForce).sub(parallel);
 
-							applyScaledForce(physShip, linearVelocity, tForce, maxSpeed);
+								// rotate the ship
+								physicShip.applyInvariantForceToPos(perpendicular, tPos);
 
-						} else {
-							// POSITION should be the only other value
-
-							Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
-									.add(0.5, 0.5, 0.5, new Vector3d())
-									.sub(physShip.getTransform().getPositionInShip());
-
-
-							Vector3d parallel = new Vector3d(tPos).mul(tForce.dot(tPos) / tForce.dot(tForce));
-
-							Vector3d perpendicular = new Vector3d(tForce).sub(parallel);
-
-							// rotate the ship
-							physShip.applyInvariantForceToPos(perpendicular, tPos);
-
-							// apply global force, since the force is perfectly lined up with the centre of gravity
-							applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
-
+								// apply global force, since the force is perfectly lined up with the centre of gravity
+								applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
+							}
 						}
 						return;
 					}
@@ -103,23 +91,87 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 			}
 
 			// Switch between applying force at position and just applying the force
-			if (data.mode == ThrusterData.ThrusterMode.POSITION) {
-				Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
-						.add(0.5, 0.5, 0.5, new Vector3d())
-						.sub(physShip.getTransform().getPositionInShip());
+			switch (data.mode) {
+				case GLOBAL -> physicShip.applyInvariantForce(tForce);
+				case POSITION -> {
+					Vector3d tPos = VectorConversionsMCKt.toJOMLD(pos)
+						.add(0.5, 0.5, 0.5)
+						.sub(physicShip.getTransform().getPositionInShip());
+					physicShip.applyInvariantForceToPos(tForce, tPos);
+				}
+			}
+		});
 
-				physShip.applyInvariantForceToPos(tForce, tPos);
+		Vector3d frontForce = new Vector3d();
+		Vector3d backForce = new Vector3d();
+		magnets.forEach((blockPos, data) -> {
+			Vector3d centerPos = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+			Vector3f facing = data.facing;
+			boolean isGenerator = data.isGenerator;
+			MagnetData.ForceCalculator forceCalculator = data.forceCalculator;
+			frontForce.set(0, 0, 0);
+			backForce.set(0, 0, 0);
+			forceCalculator.calc(physShip, frontForce, backForce);
+			if (isGenerator) {
+				physShip.applyInvariantForce(frontForce);
+				physShip.applyInvariantTorque(backForce);
+				return;
+			}
 
-				//ThrusterData.ThrusterMode.GLOBAL should be the only other value:
-			} else {
-				// Apply the force at no specific position
-				physShip.applyInvariantForce(tForce);
+			boolean hasFrontForce = frontForce.lengthSquared() != 0;
+			boolean hasBackForce = backForce.lengthSquared() != 0;
+			if (!hasFrontForce && !hasBackForce) {
+				return;
+			}
+			ShipTransform transform = physicShip.getTransform();
+			Vector3d frontPos = centerPos.sub(transform.getPositionInShip(), new Vector3d()).add(facing.div(2, new Vector3f()));
+			Vector3d backPos = frontPos.sub(facing, new Vector3d());
+
+			if (VSCHConfig.LIMIT_SPEED.get()) {
+				int maxSpeed = VSCHConfig.MAX_SPEED.get().intValue();
+				Vector3dc linearVelocity = physShip.getPoseVel().getVel();
+				if (linearVelocity.lengthSquared() >= maxSpeed * maxSpeed) {
+					if (hasFrontForce) {
+						if (frontForce.dot(linearVelocity) > 0) {
+							Vector3d parallel = new Vector3d(frontPos).mul(frontForce.dot(frontPos) / frontForce.dot(frontForce));
+							Vector3d perpendicular = new Vector3d(frontForce).sub(parallel);
+
+							// rotate the ship
+							physicShip.applyInvariantForceToPos(perpendicular, frontPos);
+
+							// apply global force, since the force is perfectly lined up with the centre of gravity
+							applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
+						} else {
+							physicShip.applyInvariantForceToPos(frontForce, frontPos);
+						}
+					}
+					if (hasBackForce) {
+						if (backForce.dot(linearVelocity) > 0) {
+							Vector3d parallel = new Vector3d(backPos).mul(backForce.dot(backPos) / backForce.dot(backForce));
+							Vector3d perpendicular = new Vector3d(backForce).sub(parallel);
+
+							// rotate the ship
+							physicShip.applyInvariantForceToPos(perpendicular, backPos);
+
+							// apply global force, since the force is perfectly lined up with the centre of gravity
+							applyScaledForce(physShip, linearVelocity, parallel, maxSpeed);
+						} else {
+							physicShip.applyInvariantForceToPos(backForce, backPos);
+						}
+					}
+					return;
+				}
+			}
+
+			if (hasFrontForce) {
+				physicShip.applyInvariantForceToPos(frontForce, frontPos);
+			}
+			if (hasBackForce) {
+				physicShip.applyInvariantForceToPos(backForce, backPos);
 			}
 		});
 
 		// Prep for draggers
-
-
 		// Apply draggers force
 		draggers.forEach((pos, data) -> {
 			Vector3dc linearVelocity = physShip.getPoseVel().getVel();
@@ -136,9 +188,6 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 			//angularVelocity.cross(relativePosition, rotationalVelocity);
 
 			// Add linear and rotational velocities
-			//Vector3d totalVelocity = new Vector3d(linearVelocity).add(rotationalVelocity);
-
-			//Vector3d acceleration = totalVelocity.negate();
 			Vector3d acceleration = linearVelocity.negate(new Vector3d());
 			Vector3d force = acceleration.mul(physShip.getInertia().getShipMass());
 
@@ -159,9 +208,9 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		double deltaTime = 1.0 / (VSGameUtilsKt.getVsPipeline(ValkyrienSkiesMod.getCurrentServer()).computePhysTps());
 		double mass = physShip.getInertia().getShipMass();
 
-		//Invert the parallel projection of tForce onto linearVelocity and scales it so that the resulting speed is exactly
+		// Invert the parallel projection of tForce onto linearVelocity and scales it so that the resulting speed is exactly
 		// equal to length of linearVelocity, but still in the direction the ship would have been going without the speed limit
-		Vector3d targetVelocity = (new Vector3d(linearVelocity).add(new Vector3d(tForce).mul(deltaTime / mass)).normalize(maxSpeed)).sub(linearVelocity);
+		Vector3d targetVelocity = new Vector3d(linearVelocity).add(new Vector3d(tForce).mul(deltaTime / mass)).normalize(maxSpeed).sub(linearVelocity);
 
 		// Apply the force at no specific position
 		physShip.applyInvariantForce(targetVelocity.mul(mass / deltaTime));
@@ -173,7 +222,6 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 		thrusters.put(pos, data);
 	}
 
-
 	public void removeThruster(BlockPos pos) {
 		thrusters.remove(pos);
 	}
@@ -181,6 +229,21 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 	@Nullable
 	public ThrusterData getThrusterAtPos(BlockPos pos) {
 		return thrusters.get(pos);
+	}
+
+	// ----- Magnets ----- //
+
+	public void addMagnet(BlockPos pos, MagnetData data) {
+		magnets.put(pos, data);
+	}
+
+	public void removeMagnet(BlockPos pos) {
+		magnets.remove(pos);
+	}
+
+	@Nullable
+	public MagnetData getMagnetAtPos(BlockPos pos) {
+		return magnets.get(pos);
 	}
 
 	// ----- Draggers ----- //
@@ -215,11 +278,7 @@ public class VSCHForceInducedShips implements ShipForcesInducer {
 
 	public static VSCHForceInducedShips get(Level level, BlockPos pos) {
 		ServerLevel serverLevel = (ServerLevel) level;
-		// Don't ask, I don't know
 		ServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel, pos);
-		if (ship == null) {
-			ship = VSGameUtilsKt.getShipManagingPos(serverLevel, pos);
-		}
 		// Seems counter-intutive at first. But basically, it returns null if it wasn't a ship. Otherwise, it gets the attachment OR creates and then gets it
 		return ship != null ? getOrCreate(ship) : null;
 	}

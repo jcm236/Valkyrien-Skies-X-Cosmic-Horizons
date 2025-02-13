@@ -26,12 +26,14 @@ import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.LazyOptional;
 
 import org.joml.Vector3d;
+import org.joml.Vector3f;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 public abstract class AbstractThrusterBlockEntity extends BlockEntity implements ParticleBlockEntity {
 	private final String typeString;
+	private Vector3f facing;
 	private final ThrusterData thrusterData;
 	private volatile float power = 0;
 	private volatile boolean powerChanged = false;
@@ -44,9 +46,9 @@ public abstract class AbstractThrusterBlockEntity extends BlockEntity implements
 		super(type, pos, state);
 
 		this.typeString = typeStr;
+		this.facing = state.getValue(DirectionalBlock.FACING).step();
 		this.thrusterData = new ThrusterData(
-			VectorConversionsMCKt.toJOMLD(state.getValue(DirectionalBlock.FACING).getNormal()),
-			0,
+			new Vector3d(),
 			state.getValue(AbstractThrusterBlock.MODE));
 	}
 
@@ -112,11 +114,15 @@ public abstract class AbstractThrusterBlockEntity extends BlockEntity implements
 		return this.thrusterData;
 	}
 
+	private void updateForce() {
+		this.thrusterData.setForce((force) -> force.set(this.facing).mul(this.getThrottle()));
+	}
+
 	@Override
 	public void load(CompoundTag data) {
 		this.setPower(data.getFloat("Power"), false);
 		this.isPeripheralMode = CompatMods.COMPUTERCRAFT.isLoaded() && data.getBoolean("PeripheralMode");
-		this.thrusterData.throttle = this.getThrottle();
+		this.updateForce();
 		super.load(data);
 	}
 
@@ -166,7 +172,7 @@ public abstract class AbstractThrusterBlockEntity extends BlockEntity implements
 
 		if (this.powerChanged) {
 			this.powerChanged = false;
-			this.thrusterData.throttle = this.getThrottle();
+			this.updateForce();
 		}
 
 		boolean isLit = state.getValue(AbstractThrusterBlock.LIT);

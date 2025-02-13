@@ -1,6 +1,7 @@
 package net.jcm.vsch.blocks.custom.template;
 
 import net.jcm.vsch.blocks.entity.template.ParticleBlockEntity;
+import net.jcm.vsch.entity.IAttachableEntity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -21,54 +22,12 @@ import java.util.UUID;
  * @see BlockWithEntity
  * @param <E> The entity class to be using
  */
-public abstract class BlockEntityWithEntity<E extends Entity> extends BlockEntity implements ParticleBlockEntity {
-	private UUID entityUUID;
+public abstract class BlockEntityWithEntity<E extends Entity & IAttachableEntity> extends BlockEntity implements ParticleBlockEntity {
+	private UUID entityUUID = null;
+	private E entity = null;
 
 	public BlockEntityWithEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
-	}
-
-	public void spawnLinkedEntity() {
-		if (!(level instanceof ServerLevel serverLevel)) {
-			return;
-		}
-		if (this.entityUUID != null) {
-			removeLinkedEntity();
-		}
-		spawnLinkedEntityImpl(serverLevel, getBlockPos());
-	}
-
-	public void spawnLinkedEntityIfNeeded() {
-		if (!(level instanceof ServerLevel serverLevel)) {
-			return;
-		}
-		if (this.entityUUID != null) {
-			return;
-		}
-		spawnLinkedEntityImpl(serverLevel, getBlockPos());
-	}
-
-	private E spawnLinkedEntityImpl(ServerLevel level, BlockPos blockPos) {
-		E entity = this.createLinkedEntity(level, blockPos);
-		entity.setPos(Vec3.atCenterOf(blockPos));
-		level.addFreshEntity(entity);
-		this.entityUUID = entity.getUUID();
-		return entity;
-	}
-
-	public void removeLinkedEntity() {
-		if (!(level instanceof ServerLevel serverLevel)) {
-			return;
-		}
-		if (this.entityUUID == null) {
-			return;
-		}
-		Entity entity = serverLevel.getEntity(this.entityUUID);
-		this.entityUUID = null;
-		// Don't remove the entity if it doesn't exist, duh
-		if (entity != null) {
-			entity.discard();
-		}
 	}
 
 	/**
@@ -78,6 +37,61 @@ public abstract class BlockEntityWithEntity<E extends Entity> extends BlockEntit
 	 * @return
 	 */
 	public abstract E createLinkedEntity(ServerLevel level, BlockPos pos);
+
+	public E getLinkedEntity() {
+		if (this.entity == null) {
+			if (this.entityUUID != null && this.getLevel() instanceof ServerLevel serverLevel) {
+				this.entity = (E) serverLevel.getEntity(this.entityUUID);
+			}
+		}
+		return this.entity;
+	}
+
+	public E getOrSpawnLinkedEntity() {
+		if (this.entity == null && this.getLevel() instanceof ServerLevel serverLevel) {
+			if (this.entityUUID != null) {
+				this.entity = (E) serverLevel.getEntity(this.entityUUID);
+			}
+			if (this.entity == null) {
+				this.spawnLinkedEntityImpl(serverLevel, this.getBlockPos());
+			}
+		}
+		return this.entity;
+	}
+
+	public void respawnLinkedEntity() {
+		if (!(level instanceof ServerLevel serverLevel)) {
+			return;
+		}
+		if (this.entityUUID != null) {
+			this.removeLinkedEntity();
+		}
+		this.spawnLinkedEntityImpl(serverLevel, this.getBlockPos());
+	}
+
+	private void spawnLinkedEntityImpl(ServerLevel level, BlockPos blockPos) {
+		E entity = this.createLinkedEntity(level, blockPos);
+		entity.setPos(Vec3.atCenterOf(blockPos));
+		level.addFreshEntity(entity);
+		this.entityUUID = entity.getUUID();
+		this.entity = entity;
+	}
+
+	public void removeLinkedEntity() {
+		if (!(level instanceof ServerLevel serverLevel)) {
+			return;
+		}
+		if (this.entityUUID == null) {
+			return;
+		}
+		Entity entity = this.getLinkedEntity();
+		this.entityUUID = null;
+		this.entity = null;
+		// Don't remove the entity if it doesn't exist, duh
+		if (entity != null) {
+			entity.discard();
+		}
+	}
 
 	// Saving and loading the attached entity UUID on world reload:
 	@Override
@@ -101,13 +115,6 @@ public abstract class BlockEntityWithEntity<E extends Entity> extends BlockEntit
 
 	@Override
 	public void tickForce(ServerLevel level, BlockPos pos, BlockState state) {
-		if (this.entityUUID == null) {
-			return;
-		}
-		Entity entity = level.getEntity(this.entityUUID);
-		if (entity == null) {
-			return;
-		}
-		entity.setPos(Vec3.atCenterOf(getBlockPos()));
+		this.getOrSpawnLinkedEntity().setAttachedBlockPos(pos);
 	}
 }

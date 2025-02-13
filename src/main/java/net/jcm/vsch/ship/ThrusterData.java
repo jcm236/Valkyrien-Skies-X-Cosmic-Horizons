@@ -1,8 +1,11 @@
 package net.jcm.vsch.ship;
 
-import org.joml.Vector3d;
-
 import net.minecraft.util.StringRepresentable;
+
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
+
+import java.util.function.Consumer;
 
 public class ThrusterData {
 
@@ -28,17 +31,34 @@ public class ThrusterData {
 		}
 	}
 
-	public final Vector3d dir;
-	public volatile float throttle;
+	public volatile Vector3d force;
+	private Vector3d forceSwap = new Vector3d();
 	public volatile ThrusterMode mode;
 
-	public ThrusterData(Vector3d dir, float throttle, ThrusterMode mode) {
-		this.dir = dir;
-		this.throttle = throttle;
+	public ThrusterData(Vector3d force, ThrusterMode mode) {
+		this.force = force;
 		this.mode = mode;
 	}
 
+	public void setForce(Vector3dc force) {
+		synchronized (this.forceSwap) {
+			Vector3d f = this.force;
+			this.force = this.forceSwap.set(force);
+			this.forceSwap = f;
+		}
+	}
+
+	public void setForce(Consumer<Vector3d> setter) {
+		synchronized (this.forceSwap) {
+			Vector3d f = this.force;
+			setter.accept(this.forceSwap);
+			this.force = this.forceSwap;
+			this.forceSwap = f;
+		}
+	}
+
 	public String toString() {
-		return "Direction: " + this.dir + " Throttle: " + this.throttle + " Mode: " + this.mode;
+		Vector3d force = this.force;
+		return "Direction: " + force.normalize() + " Throttle: " + force.length() + " Mode: " + this.mode;
 	}
 }

@@ -25,17 +25,17 @@ public class ThrusterPeripheral implements IPeripheral {
 	}
 
 	@LuaFunction
-	public String getThrusterType() {
+	public final String getThrusterType() {
 		return this.entity.getTypeString();
 	}
 
 	@LuaFunction(mainThread = true)
-	public String getMode() {
+	public final String getMode() {
 		return this.entity.getThrusterMode().toString();
 	}
 
 	@LuaFunction(mainThread = true)
-	public void setMode(String mode) throws LuaException {
+	public final void setMode(String mode) throws LuaException {
 		ThrusterData.ThrusterMode tmode;
 		try {
 			tmode = ThrusterData.ThrusterMode.valueOf(mode.toUpperCase());
@@ -46,22 +46,22 @@ public class ThrusterPeripheral implements IPeripheral {
 	}
 
 	@LuaFunction
-	public boolean getPeripheralMode() {
+	public final boolean getPeripheralMode() {
 		return this.entity.getPeripheralMode();
 	}
 
 	@LuaFunction
-	public void setPeripheralMode(boolean mode) {
+	public final void setPeripheralMode(boolean mode) {
 		this.entity.setPeripheralMode(mode);
 	}
 
 	@LuaFunction
-	public float getPower() {
+	public final float getPower() {
 		return this.entity.getPower();
 	}
 
 	@LuaFunction
-	public void setPower(double power) throws LuaException {
+	public final void setPower(double power) throws LuaException {
 		if (!this.entity.getPeripheralMode()) {
 			// Instead of returning a string as an error, which is weird.
 			throw new LuaException("Peripheral mode is off, redstone control only");
@@ -70,12 +70,12 @@ public class ThrusterPeripheral implements IPeripheral {
 	}
 
 	@LuaFunction
-	public float getMaxThrottle() {
+	public final float getMaxThrottle() {
 		return this.entity.getMaxThrottle();
 	}
 
 	@LuaFunction
-	public float getThrottle() {
+	public final float getThrottle() {
 		return this.entity.getThrottle();
 	}
 
