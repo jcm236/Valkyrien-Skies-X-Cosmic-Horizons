@@ -25,32 +25,32 @@ public class MagnetPeripheral implements IPeripheral {
 	}
 
 	@LuaFunction
-	public boolean isGenerator() {
+	public final boolean isGenerator() {
 		return this.entity.getIsGenerator();
 	}
 
 	@LuaFunction
-	public void setGenerator(boolean isGenerator) {
+	public final void setGenerator(boolean isGenerator) {
 		this.entity.setIsGenerator(isGenerator);
 	}
 
 	@LuaFunction
-	public boolean getPeripheralMode() {
+	public final boolean getPeripheralMode() {
 		return this.entity.getPeripheralMode();
 	}
 
 	@LuaFunction
-	public void setPeripheralMode(boolean mode) {
+	public final void setPeripheralMode(boolean mode) {
 		this.entity.setPeripheralMode(mode);
 	}
 
 	@LuaFunction
-	public float getPower() {
+	public final float getPower() {
 		return this.entity.getPower();
 	}
 
 	@LuaFunction
-	public void setPower(double power) throws LuaException {
+	public final void setPower(double power) throws LuaException {
 		if (!this.entity.getPeripheralMode()) {
 			throw new LuaException("Peripheral mode is off, redstone control only");
 		}

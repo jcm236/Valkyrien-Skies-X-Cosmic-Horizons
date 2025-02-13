@@ -25,22 +25,22 @@ public class DragInducerPeripheral implements IPeripheral {
 	}
 
 	@LuaFunction
-	public boolean getPeripheralMode() {
+	public final boolean getPeripheralMode() {
 		return this.entity.getPeripheralMode();
 	}
 
 	@LuaFunction
-	public void setPeripheralMode(boolean mode) {
+	public final void setPeripheralMode(boolean mode) {
 		this.entity.setPeripheralMode(mode);
 	}
 
 	@LuaFunction
-	public boolean isEnabled() {
+	public final boolean isEnabled() {
 		return this.entity.isEnabled();
 	}
 
 	@LuaFunction
-	public void setEnabled(boolean enabled) throws LuaException {
+	public final void setEnabled(boolean enabled) throws LuaException {
 		if (!this.entity.getPeripheralMode()) {
 			// Instead of returning a string as an error, which is weird.
 			throw new LuaException("Peripheral mode is off, redstone control only");
